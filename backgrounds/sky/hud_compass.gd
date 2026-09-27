@@ -1,0 +1,966 @@
+## The compass dial of the sky HUD (计划 §6.4, §6.5 S7): the horizon drawn as the
+## card the sky is seen against, with a live 奇门 chart and a live 大六壬 chart
+## laid out on it.
+##
+## The card stands still, 南 at the top and 北 at the bottom - the 上南下北 a 罗盘
+## is read at (2026-10-10 第十五轮; it used to turn under a fixed index at the top
+## that read the view's bearing, 计划 A12's dial). What says where the camera looks
+## is now an **arc outside the rim** centred on the view's own bearing, and the
+## four **direction triangles** on the card's own axes are the controls that aim
+## it: they are the 北/东/南/西 chip row that used to stand under the dial, moved
+## onto the points they name. The charts are cast for the sky's own instant by
+## `QiMen.pan()` / `LiuRen.pan()` and recomputed when the 时辰 turns:
+##
+##   卦 ring      后天八卦的卦符 (the eight palaces the 奇门 chart is cast on)
+##   八宫块 3 行    the 奇门 chart itself, one block per 宫 on that 宫's bearing:
+##               神 / 星 / 门 从上到下、**正写**（2026-10-09 第十一轮起不再按环
+##               排内外），每行后面跟着跟它走的那个 干，值符星/值使门/值符神仍描金
+##   环五 12 分   大六壬 天盘支 + 遁干 + 贵人 - the one plate still drawn as a ring
+##   环外        the Sun outside the degree ticks and the Moon inside them, each on
+##               the bearing the sky has it on - the two marks the card carries
+##               for something that is not a ring - and the seven planets, which
+##               the sky hands over the same way (2026-10-09: 行星指针)
+##
+## and the middle is a 太极 in place of a bearing readout.
+##
+## The tick ring is the card's own clock: 12 大 x 5 小, and the card carries that
+## clock's hand - one 6 deg step per second of sky time (`TimeCore.changed`), its
+## tip landing on the 小刻 it reads. Over the same band runs the 二十八宿's own
+## scale (S6): one mark per 宿, on the bearing its opening stands on at the instant,
+## told from the clock's marks by colour and length. The 驿马 stirs on the same
+## beat. The card stands still, so every ring on it stands still with it; what
+## moves is the sky's own doing (the hand, the 宿, the 驿马, the Sun, the Moon and
+## the planets) and the view arc, which is the camera's.
+##
+## The 卦 ring draws its eight trigrams as bars rather than as the ☰ U+2630..☷
+## U+2637 characters: the system's CJK font (Fonts.CANDIDATES) carries none of
+## them, so a character ring would come out as eight empty boxes. The 左转/右转
+## chips are ← U+2190 and → U+2192 for the same reason - the font has no ◀ U+25C0
+## or ▶ U+25B6 either, and no hollow variant of them.
+##
+## The card is display only apart from its own controls - 左转/右转 in its two upper
+## corners, the time bar's 时辰 chips in the two lower ones, and the four direction
+## triangles on its axes - and every control is a real Button, so HudWindow can tell
+## them from the drag handle of the window.
+class_name SkyCompassHud
+extends Control
+
+## The 后天 (King Wen) arrangement with the 洛书 palace each trigram heads, one
+## entry per ring slot from 坎 at due north: the same eight palaces the 奇门 chart
+## is cast on, which is why the chart's stars and doors land under them. The third
+## field is the trigram's own shape, a 乾-to-坤 bit mask of its three 爻 read from
+## the bottom up, 1 for a solid 爻 - 坎 010 is 2, 乾 111 is 7, 坤 000 is 0. It
+## names the glyph the ring draws (the Unicode ☰..☷ are not in the system font).
+const BAGUA := [["坎", 1, 2], ["艮", 8, 4], ["震", 3, 1], ["巽", 4, 6],
+		["离", 9, 5], ["坤", 2, 0], ["兑", 7, 3], ["乾", 6, 7]]
+
+## How far one 左转/右转 press turns the view: one 山 (15 deg).
+const TURN_STEP := 15.0
+## The 左转/右转 chips hold one arrow each (↙ U+2199 / ↘ U+2198, 2026-10-10 第十八轮).
+## 16 px is as large as the glyph can be with the chip still exactly 24 px tall - the
+## system font is 22 px high at that size - and the chip draws it with a 1 px outline
+## in its own ink, because a thin diagonal stroke reads lighter than the two-character
+## chips the time bar carries at 13 px.
+const ARROW_SIZE := 16
+const ARROW_OUTLINE := 1
+
+## The card's geometry: the disc, the tick ring the view arc is read against, the 奇门's
+## eight 宫 blocks, the two body marks and the 太极 in the middle. The 大六壬 plate
+## outside the blocks is the one chart still drawn as a ring of its own; the two
+## body marks have the strips either side of the degree ticks.
+const CENTRE := Vector2(150.0, 150.0)
+const R_DISC := 138.0
+const R_TICK_OUT := 129.0
+const R_TICK_IN := 119.0
+const R_SUN := 134.0    ## outside the ticks, inside the rim
+const R_MOON := 115.0   ## inside the ticks
+## The view arc (2026-10-10 第十五轮): where the camera looks, drawn outside the rim
+## on that bearing - it replaced the index triangle that stood over the top of the
+## dial. Its reach is the window's: the rim leaves 12 px either side and the four
+## direction marks use 8 of them, so it is drawn between the rim and their tips. A
+## view landing exactly on a cardinal hides the arc's middle behind that point's
+## own triangle; the rest of the arc still says which way the turn went. ARC_SPAN
+## is the mark's own width and not the field of view - the rig holds a *vertical*
+## fov and the card knows nothing of the wallpaper's shape, so the arc says where
+## the view is and not how much sky it holds.
+const R_VIEW_ARC := R_DISC + 5.0
+const ARC_SPAN := 40.0
+const ARC_WIDTH := 3.0
+## The bearing the card is read at: 南 on top, 北 at the bottom (上南下北).
+const SOUTH_UP := 180.0
+## One direction triangle's own size - a 10 x 8 px mark - and the button around it,
+## 24 x 24 so the thing can actually be hit: the rim is only 12 px from the window's
+## edge, so the button is laid flush with that edge and the mark sits inside it
+## where the point is, rather than the button being centred on the mark and hanging
+## outside the window.
+const DIR_BUTTON := 24.0
+## How far past the rim a direction mark's centre stands: the mark is 8 px deep, so
+## its base sits a px off the rim and its tip ends 9 px out - just inside the 12 px
+## the window leaves, with the view arc's own band crossing the middle of it.
+const DIR_MARK := 5.0
+## The 二十八宿's own scale (S6), over the degree ring's band: told from the clock's
+## 60 小刻 and 12 大刻 by its colour and its reach, which is between theirs.
+const R_MANSION_IN := 119.0
+const R_MANSION_OUT := 127.0
+const R_LIUREN := 106.0
+## The 驿马's own ring (2026-10-09 第十二轮: 块往里收，给马留出一圈): outside the 宫
+## blocks and inside the 大六壬 ring, at r 92 - the four branches the horse rides
+## fall between two 宫, so its mark lands in the gap either way.
+const R_HORSE := 92.0
+## The 奇门's eight 宫 blocks: the anchor of a block is where its 宫's bearing is, and
+## its three lines stand this far apart, centred on the anchor. 64 (pulled in from
+## 74) so the block occupies r 43…85 and leaves the 马 its own band at 86…98 - inside
+## the 卦 ring (which ends at 41) and clear of the 大六壬 ring (which starts at 99).
+## The pitch is one px more than the line is tall, which is what keeps two lines of
+## CJK glyphs from touching.
+const R_PALACE := 64.0
+const LINE_PITCH := 14.0
+const LINE_SIZE := 13
+## The 八分盘 behind those blocks (用户 2026-10-10 第二十轮): the disc carries the
+## chart's eight 宫 as eight sectors, and the 内盘 half of them is 微亮, so which
+## half of the chart is inside is read off the card itself - 阳遁 lights the 阳宫
+## (洛书 8/3/4/1), 阴遁 the 阴宫 (2/9/6/7). The band runs from just outside the 卦
+## ring to just inside the 驿马's own circle: it carries the blocks (r 43…85) with a
+## little air either side, and the two colours are the card's own cyan at two alphas
+## - the step between them is the whole readout, so both are kept faint.
+const R_PANEL_IN := 34.0
+const R_PANEL_OUT := 90.0
+const PANEL_SEG := 16
+const C_PANEL_INNER := Color(0.34, 0.72, 0.86, 0.13)
+const C_PANEL_OUTER := Color(0.34, 0.72, 0.86, 0.045)
+const R_BAGUA := 26.0   ## 2026-10-09 第十二轮：34 → 26（朝太极贴近一半），贴着太极那一圈
+const ROW := 7.0   ## half a label row: how far a ring's own grid lines reach
+## The hands, read off the card's own clock face: the 地支 ring is the hour face -
+## 午 is the top, so the top is noon or midnight, and a 大刻 is an hour - and the 60
+## 小刻 are the minutes and the seconds, which is the scale the second hand already
+## read (2026-10-09 第八轮). The hour hand is the short heavy one, the minute hand
+## reaches into the 大六壬 ring, and the second hand is the long thin one whose tip
+## lands on the 小刻's own inner end: its stem has the 奇门's blocks and both rings to
+## cross and is drawn faint, only the outer half of it solid (用户 2026-10-10 第十九轮
+## 加时针分针).
+const HAND_HOUR := 74.0
+const HAND_MINUTE := 98.0
+const HAND_TIP := 124.0
+const HAND_STEM := 112.0
+## The 驿马's twitch: on the clock's beat it swings sideways for this long and this
+## far at its widest (the mark is 12 px, so 3 px reads as a shake and not a move),
+## at this many shakes a second inside the window.
+const TWITCH_SEC := 0.35
+const TWITCH_PX := 3.0
+const TWITCH_HZ := 5.0
+## The 太极 is the card's own centre mark and 2/3 of the 26 px it was: the 卦 ring
+## closes in behind it and the three chart rings stay where they are.
+const TAIJI_R := 17.3
+const TAIJI_SEG := 48
+## One trigram's bars: how wide the 爻 are, how tall, how far apart, and how much
+## of a broken 爻's middle is left out.
+const TRIGRAM_W := 13.0
+const TRIGRAM_H := 2.0
+const TRIGRAM_PITCH := 4.5
+const TRIGRAM_GAP := 4.5
+
+const C_DISC := Color(0.012, 0.035, 0.052, 0.72)
+const C_RIM := Color(0.30, 0.72, 0.82, 0.42)
+const C_RING := Color(0.30, 0.72, 0.82, 0.20)
+const C_TICK := Color(0.44, 0.63, 0.70, 0.55)
+const C_TICK_MAJOR := Color(0.66, 0.86, 0.94, 0.85)
+## 二十八宿: the warm ink the sky writes the 宿 in, so the two scales read as one
+## system across the wallpaper and the card.
+const C_MANSION := Color(0.92, 0.78, 0.52, 0.62)
+const C_BAGUA := Color(0.88, 0.96, 0.99, 0.90)
+const C_STAR := Color(0.72, 0.84, 0.92, 0.86)
+const C_DOOR := Color(0.62, 0.80, 0.90, 0.86)
+const C_GOD := Color(0.82, 0.76, 0.98, 0.86)
+const C_ZHI := Color(0.98, 0.78, 0.52, 0.88)
+const C_DUTY := Color(1.00, 0.84, 0.45, 0.95)   ## 值符星 / 值使门 / 值符神, each on the palace it stands on
+## 驿马: the one mark on the card that is a *place*, not a name - an orange-brass of
+## its own, warm enough to read as a travelling mark and clear of the duty gold.
+const C_HORSE := Color(0.98, 0.62, 0.30, 0.95)
+## The second hand: a pale needle of the instrument's own rather than a mark of a
+## chart, so it stays out of the ring colours and the cyan of the index. The stem
+## is the same ink at a low alpha - it crosses the rings, the tip does not.
+const C_HAND := Color(0.80, 0.94, 1.00, 0.80)
+const C_HAND_STEM := Color(0.80, 0.94, 1.00, 0.26)
+## The four cardinal points, drawn as triangles outside the rim (计划 §6.4) - since
+## 2026-10-10 第十五轮 they are the card's own direction buttons, one triangle on
+## each axis of the card. 东 淡绿, 北 红, 西 白 as asked; 南 was left uncoloured in
+## the brief, so it keeps the card's own accent rather than inventing a fourth
+## colour.
+const C_EAST := Color(0.62, 0.95, 0.66, 0.95)
+const C_NORTH := Color(0.95, 0.38, 0.34, 0.95)
+const C_WEST := Color(0.95, 0.97, 1.00, 0.95)
+const C_SUN := Color(1.00, 0.84, 0.40, 0.95)
+const C_MOON := Color(0.88, 0.92, 0.99, 0.95)
+## How much of a body mark is drawn while that body is below the horizon: the card
+## is read against the horizon, so a mark under it is a hint, not a position.
+const C_BELOW := 0.30
+const C_INDEX := Color(0.30, 0.85, 1.00)
+const C_TEXT := Color(0.88, 0.96, 0.99)
+const C_DIM := Color(0.44, 0.63, 0.70)
+const C_FILL := Color(0.09, 0.21, 0.26, 0.80)
+const C_FILL_HOVER := Color(0.14, 0.31, 0.38, 0.90)
+const C_BORDER := Color(0.30, 0.72, 0.82, 0.32)
+const C_BORDER_HOVER := Color(0.40, 0.85, 0.95, 0.55)
+const C_TAIJI_WHITE := Color(0.94, 0.92, 0.88)
+const C_TAIJI_BLACK := Color(0.08, 0.08, 0.11)
+
+## The card's four direction triangles (2026-10-10 第十五轮): the 北/东/南/西 chip
+## row that used to stand under the dial, moved onto the points it names. `cardinal`
+## is what `CameraRig.face_cardinal()` is called with, `bearing` where that point
+## stands - which is also where the button goes, the card being fixed - and
+## `colour` the ink its triangle is drawn in.
+const DIRECTIONS := [
+	{"cardinal": "north", "bearing": 0.0, "colour": C_NORTH},
+	{"cardinal": "east", "bearing": 90.0, "colour": C_EAST},
+	{"cardinal": "south", "bearing": 180.0, "colour": C_INDEX},
+	{"cardinal": "west", "bearing": 270.0, "colour": C_WEST},
+]
+
+var rig: CameraRig
+## The sky's clock, handed over by the sky (`SkyBackground.clock`): its beat is
+## what steps the 马 and stirs it - one `changed` per `step_seconds` of sky time,
+## which is one second at rate 1 and never at rate 0. The card's *hands* do not
+## read it: they are the observer's own wall clock (see `_hands`).
+var clock: TimeCore
+## Whose wall clock the hands keep, handed over by the sky. Null means the hands
+## read UTC, which is only what a probe gets.
+var observer: Observer
+
+var _font: Font
+var _palaces: Array = []    ## index = 洛书宫, the catalogue of the 奇门 chart
+var _slots: Array = []      ## index = 地盘子, the 大六壬 天盘 over it
+## Where the Sun and the Moon stand, each Vector2(altitude, azimuth) - the two
+## readings the dial marks them by. Empty until the sky hands them over.
+var _bodies: Dictionary = {}
+## The 驿马's branch (0 = 子), or -1 before a chart arrives: the 时辰's 三合 horse.
+var _horse := -1
+## The 奇门 旬空 as 神盘 slots (index into `BAGUA`, i.e. 坎艮震巽离坤兑乾), empty when
+## no chart has arrived: those palaces' 神 are drawn with a 〇 before the name.
+var _kong: Array = []
+## The 局 number of that chart, kept for its sign: 阳遁 is positive and 阴遁 negative
+## (`QiMen.ju_name`), and which four 宫 are 内盘 follows from it. 0 before a chart
+## arrives, which is also when the 八分盘 is not drawn at all.
+var _ju := 0
+## The 二十八宿's openings as bearings, handed over by the sky on every time step:
+## [{at: Vector2(altitude, azimuth)}], index = 角..轸. Empty until it arrives, which
+## is also when the scale is not drawn at all.
+var _mansions: Array = []
+## Seconds since the last beat, and so how far into its twitch the 马 is; at
+## TWITCH_SEC and past it the mark is at rest and nothing asks for a redraw.
+var _twitch := TWITCH_SEC
+## The last real second the card was drawn at: `_process` asks for a frame when it
+## turns, which is what keeps the hands moving while the sky stands still.
+var _ticked := -1
+
+
+# --------------------------------------------------------------------- setup
+
+func setup(camera_rig: CameraRig, sky_clock: TimeCore = null,
+		from: Observer = null) -> void:
+	rig = camera_rig
+	clock = sky_clock
+	observer = from
+	if rig != null:
+		rig.moved.connect(_refresh)
+	if clock != null:
+		clock.changed.connect(_beat)
+	_refresh()
+
+
+## One beat of the sky clock (`TimeCore.changed`, one per sky second at rate 1):
+## the 马 is put back at the start of its twitch. The hands do not need it - they
+## read the observer's own clock at draw time, and `_process` is what asks for a
+## frame when their second turns (用户 2026-10-10 第十九轮: 时辰加减时秒针乱飞,
+## 让秒针独立运行).
+func _beat() -> void:
+	_twitch = 0.0
+	_refresh()
+
+
+## The twitch has to be animated between beats, and the hands have to be turned by
+## the *real* second, which the sky's clock spends 7200 of at a time when a 时辰 is
+## pressed. So the control ticks for the last 0.35 s of each real second and asks
+## for one frame at the turn of each one, and is otherwise idle: the card is static
+## in between and the wallpaper behind it is on demand.
+func _process(delta: float) -> void:
+	var second := int(wall_clock()["second"])
+	if second != _ticked:
+		_ticked = second
+		queue_redraw()
+	if _twitch >= TWITCH_SEC:
+		return
+	_twitch = minf(_twitch + delta, TWITCH_SEC)
+	queue_redraw()
+
+
+## The charts the card is drawn from, handed over by the sky whenever the 时辰
+## turns: `pan` is `QiMen.pan()`'s palaces, `liuren` is `LiuRen.pan()`'s slots, and
+## `kong` the 奇门 旬空's two 支 (the 神盘 writes a 〇 before the 神 of the palace
+## they fall in).
+func set_chart(pan: Array, liuren: Array, horse := -1, kong: Array = []) -> void:
+	_palaces = pan
+	_slots = liuren
+	_horse = horse
+	_kong = []
+	for branch in kong:
+		var index := Branches.NAMES.find(String(branch))
+		if index >= 0 and not _kong.has(kong_slot(index)):
+			_kong.append(kong_slot(index))
+	_refresh()
+
+
+## Which 局 the chart was cast in, handed over with it: only the sign is read here
+## (the 八分盘's 内盘 is the 阳宫 under a 阳遁 and the 阴宫 under a 阴遁), but the number
+## itself is what the sign is carried in, so the dial keeps the 局 whole.
+func set_ju(ju: int) -> void:
+	_ju = ju
+	_refresh()
+
+
+## Which 神盘 slot a 空亡 支 marks: the 神 ring's eight 45 deg sectors are the 后天八宫,
+## so the slot is the palace whose sector holds that branch - 子 坎, 丑寅 艮, 卯 震,
+## 辰巳 巽, 午 离, 未申 坤, 酉 兑, 戌亥 乾. The four corner palaces cover two branches
+## and are 空 when either of them is (which is why the two 空亡 支 can share a slot).
+static func kong_slot(branch: int) -> int:
+	return int(round(2.0 * float(branch) / 3.0)) % 8
+
+
+## The bodies the dial marks, handed over by the sky on every time step
+## (`SkyBackground._bodies`): Vector2(altitude, azimuth) each, the same pair
+## `Astro.altaz()` reports. They move with the clock, not with the 时辰, so they are
+## set outside set_chart(). `planets` is one {at, colour, norm} per planet, `norm`
+## the magnitude ramp `SkyPlanets.mark_norm` gives (0 faint, 1 bright).
+func set_bodies(sun: Vector2, moon: Vector2, planets: Array = []) -> void:
+	_bodies = {"sun": sun, "moon": moon, "planets": planets}
+	_refresh()
+
+
+## The 二十八宿's openings, handed over by the sky with the bodies: one
+## {at: Vector2(altitude, azimuth)} per 宿, in 角..轸 order.
+func set_mansions(entries: Array) -> void:
+	_mansions = entries
+	_refresh()
+
+
+func _ready() -> void:
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_font = Fonts.ui_font()
+	_build_controls()
+
+
+func _refresh() -> void:
+	queue_redraw()
+
+
+# ------------------------------------------------------------ dial arithmetic
+
+## Where a bearing is drawn on the card: the card stands still with 南 at the top
+## and 北 at the bottom (`SOUTH_UP`, 上南下北, 2026-10-10 第十五轮), so this is only
+## how far clockwise from the top a bearing sits - 北 reads 180 (the bottom), 东 270
+## (the left), 西 90 (the right). It used to be measured against the view's own
+## bearing, and that difference is what turned the card; the camera's own reading is
+## the view arc's business now, not the card's.
+static func dial_offset_deg(bearing_deg: float) -> float:
+	return fposmod(bearing_deg - SOUTH_UP, 360.0)
+
+
+# ------------------------------------------------------------------- controls
+
+func _build_controls() -> void:
+	# 左转 / 右转 sit in the card's own **upper** corners (用户 2026-10-10 第十八轮:
+	# 移到罗盘左上/右上角), the two corners the rim leaves free at the top - the lower
+	# pair is the time bar's 时辰 chips. They carry arrows rather than words, and the
+	# arrows point the way the card turns under the view: ↙ U+2199 at the top left is
+	# 左转, ↘ U+2198 at the top right is 右转 (the ◀ U+25C0 family is not in the system
+	# font, ↙↘ are). One glyph in the box, so a size up.
+	# The chips are added to the tree *before* their box is set: a Button is never
+	# smaller than its minimum size, and until it is in the tree that minimum is the
+	# default theme's (31 px tall, whatever the font), which would clamp a 60 x 24 chip
+	# to 60 x 31 and never let it shrink back (measured 2026-10-10 第十八轮).
+	var left := _chip("↙", ARROW_SIZE)
+	left.pressed.connect(turn.bind(-1))
+	add_child(left)
+	left.position = Vector2(12.0, 8.0)
+	left.size = Vector2(60.0, 24.0)
+
+	var right := _chip("↘", ARROW_SIZE)
+	right.pressed.connect(turn.bind(1))
+	add_child(right)
+	right.position = Vector2(228.0, 8.0)
+	right.size = Vector2(60.0, 24.0)
+
+	# The four direction triangles, on the card's own four axes (2026-10-10 第十五轮):
+	# the 北/东/南/西 chip row that used to stand under the dial, moved onto the
+	# points it names. 南 is the top of the card and 北 the bottom, so pressing 北
+	# turns the view to the bottom of the card, which is where the view arc walks to.
+	for direction: Dictionary in DIRECTIONS:
+		_add_direction(direction)
+
+
+## One direction triangle's button: a 24 x 24 target with the mark drawn where the
+## point actually stands inside it. The mark's centre is the point's own place on the
+## rim (the rim plus DIR_MARK) and the button is laid flush with the window's edge
+## along the axis it faces, because a box centred on a mark that is only 7 px from
+## that edge would hang off the card.
+func _add_direction(direction: Dictionary) -> void:
+	var at := CENTRE + out_of(float(direction["bearing"])) * (R_DISC + DIR_MARK)
+	var origin := Vector2(clampf(at.x - DIR_BUTTON * 0.5, 0.0, size.x - DIR_BUTTON),
+			clampf(at.y - DIR_BUTTON * 0.5, 0.0, size.y - DIR_BUTTON))
+	var button := DirectionButton.new()
+	button.out = out_of(float(direction["bearing"]))
+	button.at = at - origin
+	button.colour = direction["colour"]
+	button.focus_mode = Control.FOCUS_NONE
+	button.position = origin
+	button.size = Vector2(DIR_BUTTON, DIR_BUTTON)
+	button.pressed.connect(rig_face.bind(String(direction["cardinal"])))
+	# the triangle is the whole control and the theme draws nothing of it, so the
+	# mark has to be repainted when the pointer enters or leaves it
+	button.mouse_entered.connect(button.queue_redraw)
+	button.mouse_exited.connect(button.queue_redraw)
+	add_child(button)
+
+
+## The unit vector from the card's centre towards a bearing's place on it, in the
+## card's own frame.
+static func out_of(bearing_deg: float) -> Vector2:
+	var angle := deg_to_rad(dial_offset_deg(bearing_deg))
+	return Vector2(sin(angle), -cos(angle))
+
+
+func _chip(text: String, font_size := 12) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.focus_mode = Control.FOCUS_NONE
+	button.add_theme_font_override("font", _font)
+	button.add_theme_font_size_override("font_size", font_size)
+	button.add_theme_color_override("font_color", C_DIM)
+	button.add_theme_color_override("font_hover_color", C_TEXT)
+	button.add_theme_color_override("font_pressed_color", C_INDEX)
+	button.add_theme_constant_override("outline_size", ARROW_OUTLINE)
+	button.add_theme_color_override("font_outline_color", C_DIM)
+	button.add_theme_stylebox_override("normal", _box(C_FILL, C_BORDER))
+	button.add_theme_stylebox_override("hover", _box(C_FILL_HOVER, C_BORDER_HOVER))
+	button.add_theme_stylebox_override("pressed", _box(C_FILL_HOVER, C_BORDER_HOVER))
+	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	return button
+
+
+static func _box(fill: Color, border: Color) -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.bg_color = fill
+	box.set_corner_radius_all(5)
+	box.set_border_width_all(1)
+	box.border_color = border
+	# A Button cannot be smaller than its own minimum size, and the default content
+	# margins would push a chip several px past the box it was asked for (measured
+	# 2026-10-10 第十八轮: 60 x 24 came out 60 x 31, whatever the font size). These
+	# chips are placed by hand in the card's corners, so they get exactly the box the
+	# layout says and the text is centred in it.
+	box.set_content_margin_all(0.0)
+	return box
+
+
+# --------------------------------------------------------------- the turning
+
+## One press of 左转 (direction -1) or 右转 (+1): the view turns one 山 the way
+## the button's arrow points - facing south and turning right means facing west,
+## so the bearing grows.
+func turn(direction: int) -> void:
+	if rig != null:
+		rig.nudge(TURN_STEP * float(direction), 0.0)
+
+
+func rig_face(cardinal: String) -> void:
+	if rig != null:
+		rig.face_cardinal(cardinal)
+
+
+# ------------------------------------------------------------------- drawing
+
+func _draw() -> void:
+	if _font == null:
+		return
+	draw_circle(CENTRE, R_DISC, C_DISC)
+	draw_arc(CENTRE, R_DISC, 0.0, TAU, 128, C_RIM, 1.2, true)
+	_draw_ticks()
+	_draw_mansions()
+	_draw_bodies()
+
+	# the 奇门's own eight blocks in the middle, the 大六壬 ring outside them - and the
+	# 八分盘 under both, which is what says which half of the chart is 内盘.
+	_draw_panels()
+	_draw_layer(_bagua_layer(), 45.0)
+	_draw_palaces()
+	_draw_layer(_liuren_layer(), 30.0)
+
+	_draw_horse()
+	_draw_hands()
+	_draw_view_arc()
+	_draw_taiji()
+
+
+## The Sun and the Moon on the card: the Sun outside the degree ticks, the Moon
+## inside them (their bearings are the card's own, so both stand on the card like
+## the rings do). A body the sky has below the horizon is dimmed rather than
+## dropped - the mark is the one thing on the card that says where a body is, and
+## "it is down" is worth reading off the card.
+func _draw_bodies() -> void:
+	for which in ["sun", "moon"]:
+		if not _bodies.has(which):
+			continue
+		var at: Vector2 = _bodies[which]
+		var dir := out_of(at.y)
+		var alpha := 1.0 if at.x > 0.0 else C_BELOW
+		if which == "sun":
+			_draw_sun(CENTRE + dir * R_SUN, Color(C_SUN, C_SUN.a * alpha))
+		else:
+			_draw_moon(CENTRE + dir * R_MOON, Color(C_MOON, C_MOON.a * alpha))
+	# the seven planets, in the Sun's own lane: a planet and the Sun can stand
+	# together on the card, and seeing that is the point of the mark (2026-10-09 行星指针)
+	for planet: Dictionary in _bodies.get("planets", []):
+		var at: Vector2 = planet["at"]
+		var dir := out_of(at.y)
+		var alpha := 1.0 if at.x > 0.0 else C_BELOW
+		_draw_planet(CENTRE + dir * R_SUN, planet["colour"], alpha, planet["norm"])
+
+
+## The 二十八宿's own scale: one mark per 宿 on the bearing its opening stands on at
+## this instant, the way the bodies are placed - an equatorial division is not a
+## fixed point of the horizon, so which way one faces turns with the hour. They run
+## across the degree ring's band and are told from the clock's marks by colour and
+## reach. A 宿 whose opening is under the horizon is dimmed rather than dropped, the
+## same reading the Sun and the Moon get.
+func _draw_mansions() -> void:
+	for entry in _mansions:
+		var at: Vector2 = entry["at"]
+		var dir := out_of(at.y)
+		var colour := C_MANSION if at.x > 0.0 else Color(C_MANSION, C_MANSION.a * C_BELOW)
+		draw_line(CENTRE + dir * R_MANSION_IN, CENTRE + dir * R_MANSION_OUT, colour,
+				1.2, true)
+
+
+## One planet's mark: a plain disc in the planet's own colour, sized by the same
+## magnitude ramp the sky's own mark is read off (`SkyPlanets.mark_norm`). No ring
+## and no crescent - those two belong to the Sun and the Moon, which are discs; a
+## planet is a point of light.
+func _draw_planet(at: Vector2, colour: Color, alpha: float, norm: float) -> void:
+	draw_circle(at, lerpf(1.3, 2.6, norm), Color(colour, alpha * 0.95))
+
+
+## A filled disc inside a thin ring, about 7 px across: the Sun.
+func _draw_sun(at: Vector2, colour: Color) -> void:
+	draw_circle(at, 2.2, colour)
+	draw_arc(at, 3.4, 0.0, TAU, 24, colour, 1.0, true)
+
+
+## A thick crescent opening to the right, about 7 px across: the Moon.
+func _draw_moon(at: Vector2, colour: Color) -> void:
+	draw_arc(at, 2.6, deg_to_rad(35.0), deg_to_rad(325.0), 20, colour, 2.2, true)
+
+
+## Degree ticks, clock-face style: a 大 mark every 30 deg - one per 地支, which is
+## also where the 大六壬 ring cuts its twelve sectors - each of the five 小 marks
+## between two of them 6 deg apart, so the card carries 12 大 and 60 小 in all. The
+## north mark is the one accent on the card: without it nothing says which way the
+## scale runs (a ring of identical ticks reads the same at 0 and at 180), and since
+## the card is fixed 上南下北 it is now the bottom of the dial.
+func _draw_ticks() -> void:
+	for i in 60:
+		var dir := out_of(6.0 * float(i))
+		var major := i % 5 == 0
+		var inner := R_TICK_IN if major else R_TICK_IN + 5.0
+		var colour := C_TICK_MAJOR if major else C_TICK
+		var width := 1.0
+		if i == 0:
+			inner = R_TICK_IN - 5.0
+			colour = C_INDEX
+			width = 1.8
+		draw_line(CENTRE + dir * inner, CENTRE + dir * R_TICK_OUT, colour, width, true)
+
+
+## One ring: its radial slot lines, then its marks. The items are `[bearing,
+## text]`, or `[bearing, text, colour]` where the entry is highlighted - except on
+## a `"trigram"` layer, where the second field is the 爻 mask and a bar glyph is
+## drawn in place of the text. (The 奇门's own names are not a ring any more: they
+## are drawn per 宫 by `_draw_palaces`.) A layer may ask for `"side_columns"`, which
+## writes the names on the card's two exact sides down the card as columns instead
+## of along the tangent - that is the 大六壬 ring's own choice.
+func _draw_layer(layer: Dictionary, cell: float) -> void:
+	var radius := float(layer["radius"])
+	var trigram: bool = String(layer.get("shape", "")) == "trigram"
+	for i in int(round(360.0 / cell)):
+		var dir := out_of(cell * 0.5 + cell * float(i))
+		draw_line(CENTRE + dir * (radius - ROW), CENTRE + dir * (radius + ROW),
+				C_RING, 1.0, true)
+	for item: Array in layer["items"]:
+		var angle := deg_to_rad(dial_offset_deg(float(item[0])))
+		var dir := Vector2(sin(angle), -cos(angle))
+		if trigram:
+			_trigram(CENTRE + dir * radius, angle, int(item[1]), layer["colour"])
+		else:
+			var colour: Color = item[2] if item.size() > 2 else layer["colour"]
+			if bool(layer.get("side_columns", false)) \
+					and is_side(dial_offset_deg(float(item[0]))):
+				_upright_column(CENTRE + dir * radius, String(item[1]), 13, colour)
+			else:
+				_radial_label(CENTRE + dir * radius, angle, String(item[1]), 13, colour)
+
+
+## 环一: the eight palaces' trigrams, as their own glyphs - the ring the 奇门 chart
+## is cast on, so the 门 and 星 rings below it read straight out to their palace.
+func _bagua_layer() -> Dictionary:
+	var items: Array = []
+	for i in BAGUA.size():
+		items.append([45.0 * float(i), int(BAGUA[i][2])])
+	return {"radius": R_BAGUA, "colour": C_BAGUA, "items": items, "shape": "trigram"}
+
+
+## The 八分盘: the disc's eight 45 deg sectors, one per 奇门 宫, standing under the 卦
+## ring and the 宫块 - the inner four 微亮, the outer four faint (用户 2026-10-10
+## 第二十轮). Which half is which is the chart's own 阴阳遁 (`QiMen.is_inner`): a 阳遁
+## lights the 阳宫 (洛书 8/3/4/1), a 阴遁 the 阴宫 (2/9/6/7), so the shading of the
+## whole card turns over when a 节 turns the 局. Every sector is exactly 45 deg wide
+## on the same band, so they tile the disc with no seam double-drawn where two of
+## them meet. Nothing is drawn until a chart arrives: the sectors are that chart's,
+## not decoration.
+func _draw_panels() -> void:
+	if _palaces.is_empty():
+		return
+	var half := deg_to_rad(22.5)
+	for i in BAGUA.size():
+		var middle := deg_to_rad(dial_offset_deg(45.0 * float(i)))
+		var inner := QiMen.is_inner(int(BAGUA[i][1]), _ju > 0)
+		var points := PackedVector2Array()
+		# out along the inner edge, back along the outer one, so the ring sector is
+		# one closed outline (a concave polygon, which is what draw_colored_polygon
+		# triangulates the same way it does the 太极's two fish)
+		for step in PANEL_SEG + 1:
+			var at := middle - half + 2.0 * half * float(step) / float(PANEL_SEG)
+			points.append(CENTRE + Vector2(sin(at), -cos(at)) * R_PANEL_IN)
+		for step in PANEL_SEG + 1:
+			var at := middle + half - 2.0 * half * float(step) / float(PANEL_SEG)
+			points.append(CENTRE + Vector2(sin(at), -cos(at)) * R_PANEL_OUT)
+		draw_colored_polygon(points, C_PANEL_INNER if inner else C_PANEL_OUTER)
+
+
+## The 奇门's eight 宫, each written as a block of three lines on its own bearing
+## (计划 §6.4, 2026-10-09 第十一轮): 神 over 星 over 门, each with the 干 that rides
+## with it. The lines are upright and run down the screen wherever the 宫 sits - the
+## chart's names are read, not followed round the dial - so the three rings that
+## used to carry them at three radii (门 inner, 神 outer) are gone, and what tells
+## one 宫 from the next is the bearing its block stands on, not a radius.
+func _draw_palaces() -> void:
+	for i in BAGUA.size():
+		var lines := _palace_block(i)
+		if lines.is_empty():
+			continue
+		var angle := deg_to_rad(dial_offset_deg(45.0 * float(i)))
+		var anchor := CENTRE + Vector2(sin(angle), -cos(angle)) * R_PALACE
+		for row in lines.size():
+			var line: Array = lines[row]
+			# centred on the anchor, so the block reads out from the 宫's own point
+			var at := Vector2(anchor.x, anchor.y
+					+ (float(row) - float(lines.size() - 1) * 0.5) * LINE_PITCH)
+			_upright_pair(at, String(line[0]), String(line[1]), line[2],
+					String(line[3]), line[4])
+
+
+## One 宫's three lines, top to bottom: its 神 (with the 空亡's 〇 in the margin when
+## the 旬空 falls in the 宫), its 星 with the 天盘干 it carries, and its 门 with the
+## 地盘干. Each line is `[mark, name, name colour, stem, stem colour]`: the mark is
+## the 〇 or empty, the name takes the duty gold when the 时辰 turns on it, and the
+## stem keeps the line's own colour.
+func _palace_block(index: int) -> Array:
+	var palace: Dictionary = _palace(int(BAGUA[index][1]))
+	if palace.is_empty():
+		return []
+	var duty_star := bool(palace.get("duty_star", false))
+	var lines: Array = []
+	var god := str(palace.get("god", ""))
+	if god != "":
+		lines.append(["〇" if _kong.has(index) else "", god,
+				C_DUTY if duty_star else C_GOD, "", C_GOD])
+	lines.append(["", _core(str(palace.get("star", "")), "天"),
+			C_DUTY if duty_star else C_STAR, str(palace.get("tian_gan", "")), C_STAR])
+	lines.append(["", _core(str(palace.get("door", "")), "门"),
+			C_DUTY if bool(palace.get("duty_door", false)) else C_DOOR,
+			str(palace.get("di_gan", "")), C_DOOR])
+	return lines
+
+
+## 环四: the 大六壬 heaven plate - 贵人, 遁干 and the 天盘支 standing over each of
+## the twelve 地盘支, the sky's own 地支 running 子 from north. Each slot's name is
+## 神 + 遁干 + 支, written along the dial like every other ring name - except the two
+## on the card's exact sides, which stand upright as a column instead
+## (`side_columns`, 用户 2026-10-10 第十七轮).
+func _liuren_layer() -> Dictionary:
+	var items: Array = []
+	for i in Branches.NAMES.size():
+		var slot: Dictionary = _slot(i)
+		if slot.is_empty():
+			continue
+		var text := "%s%s%s" % [slot.get("god", ""), slot.get("stem", ""),
+				slot.get("branch", "")]
+		items.append([Branches.bearing(i), text])
+	return {"radius": R_LIUREN, "colour": C_ZHI, "items": items, "side_columns": true}
+
+
+## The name a line or ring draws: the chart's own is the full one (天蓬, 休门), and a
+## line that shows it beside a stem has room for the character that names it - the
+## 天 in front, the 门 behind.
+static func _core(name: String, affix: String) -> String:
+	if name.begins_with(affix):
+		return name.substr(affix.length())
+	if name.ends_with(affix):
+		return name.substr(0, name.length() - affix.length())
+	return name
+
+
+func _palace(number: int) -> Dictionary:
+	return _palaces[number] if number < _palaces.size() and _palaces[number] is Dictionary \
+			else {}
+
+
+func _slot(index: int) -> Dictionary:
+	return _slots[index] if index < _slots.size() and _slots[index] is Dictionary else {}
+
+
+## The 驿马 - the horse the 时辰's 三合 sends to 寅 巳 申 亥 - as a small 马 on the 神盘's
+## own radius. Those four branches fall between the eight palace slots, so the mark
+## never lands on a ring label; it is the one thing on the card that says where the
+## chart is travelling rather than what is standing where. It is written the right
+## way up (a mark to read, not a ring's name to follow round the dial) and shivers
+## sideways for TWITCH_SEC on every beat of the clock.
+func _draw_horse() -> void:
+	if _horse < 0 or _horse >= Branches.NAMES.size():
+		return
+	var angle := deg_to_rad(dial_offset_deg(Branches.bearing(_horse)))
+	var dir := Vector2(sin(angle), -cos(angle))
+	var at := CENTRE + dir * R_HORSE
+	if _twitch < TWITCH_SEC:
+		var decay := 1.0 - _twitch / TWITCH_SEC
+		at += Vector2(-dir.y, dir.x) * sin(TAU * TWITCH_HZ * _twitch) * TWITCH_PX * decay
+	_upright_label(at, "马", 12, C_HORSE)
+
+
+## The observer's own wall clock, as Godot's datetime dictionary in their local
+## time. The sky's clock is deliberately not consulted: a 时辰 press walks the sky
+## two hours in about a second, and a hand that read it flew round 120 times
+## (用户 2026-10-10 第十九轮: 时辰加减时秒针乱飞，让秒针独立运行，不受旋转影响).
+func wall_clock() -> Dictionary:
+	var offset := observer.utc_offset if observer != null else 0.0
+	return Time.get_datetime_dict_from_unix_time(
+			int(Time.get_unix_time_from_system() + offset * 3600.0))
+
+
+## The three hands, on the card's own face: 12 o'clock is the top - 午, noon - and
+## they turn clockwise from there, the same way the tick ring and the view arc are
+## counted. The hour and minute hands are solid; the second hand's stem is faint
+## where it crosses the 八宫块 and the two chart rings.
+func _draw_hands() -> void:
+	var now := wall_clock()
+	var hour := float(now["hour"]) + float(now["minute"]) / 60.0
+	var minute := float(now["minute"]) + float(now["second"]) / 60.0
+	var second := float(now["second"])
+	_hand(hour / 12.0 * 360.0, HAND_HOUR, 2.6, C_HAND)
+	_hand(minute / 60.0 * 360.0, HAND_MINUTE, 1.8, C_HAND)
+	_hand(second / 60.0 * 360.0, HAND_STEM, 1.0, C_HAND_STEM)
+	_hand(second / 60.0 * 360.0, HAND_TIP, 1.2, C_HAND)
+
+
+## One hand: a line from just outside the 太极 out to `reach`, turned
+## `degrees_clockwise_from_top` round the card.
+func _hand(degrees_clockwise_from_top: float, reach: float, width: float,
+		colour: Color) -> void:
+	var angle := deg_to_rad(degrees_clockwise_from_top)
+	var dir := Vector2(sin(angle), -cos(angle))
+	draw_line(CENTRE + dir * (TAIJI_R + 3.0), CENTRE + dir * reach, colour, width, true)
+
+
+## The view arc: where the 3D scene's camera looks, as an arc outside the rim
+## centred on that bearing (2026-10-10 第十五轮, replacing the index triangle that
+## used to stand over the top of the dial). With the card fixed, the camera's own
+## reading has to be the thing that moves - turning the view, one 山 at a time or
+## by pressing a direction triangle, walks this arc round the rim, and pointing the
+## view at 北 puts its middle at the bottom of the card, where 北 is.
+func _draw_view_arc() -> void:
+	if rig == null:
+		return
+	# draw_arc measures from +x towards +y (screen down), this card's dial angle
+	# from the top towards the east, so the two differ by a quarter turn
+	var middle := deg_to_rad(dial_offset_deg(rig.azimuth)) - PI * 0.5
+	var half := deg_to_rad(ARC_SPAN * 0.5)
+	draw_arc(CENTRE, R_VIEW_ARC, middle - half, middle + half, 32, C_INDEX, ARC_WIDTH,
+			true)
+
+
+## The 太极 in the middle of the card, where the bearing readout used to be: two
+## fish one S-curve apart, the white one the left half plus the bulge over the top
+## and minus the notch under it, and an eye in each head (the reference compass
+## builds its own the same way).
+func _draw_taiji() -> void:
+	draw_colored_polygon(_fish(true), C_TAIJI_WHITE)
+	draw_colored_polygon(_fish(false), C_TAIJI_BLACK)
+	draw_circle(CENTRE + Vector2(0.0, -TAIJI_R * 0.5), TAIJI_R * 0.16, C_TAIJI_BLACK)
+	draw_circle(CENTRE + Vector2(0.0, TAIJI_R * 0.5), TAIJI_R * 0.16, C_TAIJI_WHITE)
+
+
+## One fish's outline in screen coordinates, its boundary walked in order: the S is
+## top → half circle → centre → half circle → bottom, and the two fish share it.
+func _fish(white: bool) -> PackedVector2Array:
+	var r := TAIJI_R
+	var r2 := r * 0.5
+	var points := PackedVector2Array()
+	if white:
+		for i in range(TAIJI_SEG + 1):
+			var t := PI * float(i) / float(TAIJI_SEG)
+			points.append(Vector2(r2 * sin(t), -r2 - r2 * cos(t)))
+		for i in range(1, TAIJI_SEG + 1):
+			var t := PI * (1.0 - float(i) / float(TAIJI_SEG))
+			points.append(Vector2(-r2 * sin(t), r2 + r2 * cos(t)))
+		for i in range(1, TAIJI_SEG + 1):
+			var a := PI + PI * float(i) / float(TAIJI_SEG)
+			points.append(Vector2(r * sin(a), -r * cos(a)))
+	else:
+		for i in range(TAIJI_SEG + 1):
+			var a := PI * float(i) / float(TAIJI_SEG)
+			points.append(Vector2(r * sin(a), -r * cos(a)))
+		for i in range(1, TAIJI_SEG + 1):
+			var t := PI * float(i) / float(TAIJI_SEG)
+			points.append(Vector2(-r2 * sin(t), r2 + r2 * cos(t)))
+		for i in range(1, TAIJI_SEG + 1):
+			var t := PI * (1.0 - float(i) / float(TAIJI_SEG))
+			points.append(Vector2(r2 * sin(t), -r2 - r2 * cos(t)))
+	for i in points.size():
+		points[i] = CENTRE + points[i]
+	return points
+
+
+## Whether a dial angle is one of the card's two exact sides - 正左 (270, 东) or
+## 正右 (90, 西). The 大六壬 ring writes the two names there as columns instead of
+## along the tangent (用户 2026-10-10 第十七轮).
+static func is_side(dial_deg: float) -> bool:
+	return is_equal_approx(fposmod(dial_deg, 180.0), 90.0)
+
+
+## One name of the 大六壬 ring written **down the card as a column**: 神 over 干 over
+## 支, every character the right way up and read downwards (用户 2026-10-10 第十七轮:
+## 正左/正右两宫从上到下竖着正写 神/干/支). The three characters are the same ones the
+## tangential label carries and in the same order - the ring's own name is only ever
+## 神 + 遁干 + 天盘支 (三字, see `_liuren_layer`) - and the column stands in the same
+## 13 x 39 px box the tangential label does at those two slots, so nothing else on
+## the card moves.
+func _upright_column(at: Vector2, text: String, size: int, colour: Color) -> void:
+	# a CJK glyph advances one em, which is the pitch the tangential label lays its
+	# characters out at too - the column ends up exactly as long as the row was
+	var pitch := _font.get_string_size("〇", HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	var top := at.y - pitch * float(text.length() - 1) * 0.5
+	for i in text.length():
+		_upright_label(Vector2(at.x, top + pitch * float(i)), text.substr(i, 1), size,
+				colour)
+
+
+## One label on the card, its top pointing radially outwards so a name stands the
+## way round the dial does - **except on the lower half of the dial**, where pointing
+## it outwards would hang the name upside down: there it is turned the other way
+## round instead, so the five names from 120 to 240 deg still read left to right
+## (用户 2026-10-10 第十六轮: 下方5组字反着的，改成正过来方便读). The two names on the
+## exact sides never reach here: they are written as columns (`_upright_column`).
+##
+## The turn is 180 deg, and a label that follows the dial's tangent is the same box
+## whichever way round it is written, so nothing moves: same box, same reach, same
+## clearance from the 奇门 blocks, the tick ring and the 驿马's own ring. Only the ink
+## changes hands.
+func _radial_label(at: Vector2, angle: float, text: String, size: int,
+		colour: Color) -> void:
+	var turn := angle
+	if angle > PI * 0.5 and angle < PI * 1.5:
+		turn += PI
+	var extent := _font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size)
+	draw_set_transform(at, turn, Vector2.ONE)
+	draw_string(_font, Vector2(-extent.x * 0.5, extent.y * 0.34), text,
+			HORIZONTAL_ALIGNMENT_LEFT, -1.0, size, colour)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## One label drawn the right way up: for the marks that are read as marks rather
+## than as a ring's own name - the 驿马 is where it is, not part of the ring it
+## happens to sit on, so it is not turned with the card the way `_radial_label`
+## turns the rings' names.
+func _upright_label(at: Vector2, text: String, size: int, colour: Color) -> void:
+	var extent := _font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size)
+	draw_string(_font, at + Vector2(-extent.x * 0.5, extent.y * 0.34), text,
+			HORIZONTAL_ALIGNMENT_LEFT, -1.0, size, colour)
+
+
+## One line of a 宫's block, the right way up and centred on `at`: the name in its
+## own colour and the 干 that rides with it in the line's ring colour, laid out as
+## one run so the pair reads as a single label. `mark` is the 空亡's 〇, and it hangs
+## in the margin to the left of the label rather than joining it - so a 宫 that is 空
+## still lines its 神 up with the 星 and the 门 under it (用户 2026-10-09 第十二轮).
+func _upright_pair(at: Vector2, mark: String, head: String, head_colour: Color,
+		tail: String, tail_colour: Color) -> void:
+	var head_size := _font.get_string_size(head, HORIZONTAL_ALIGNMENT_LEFT, -1, LINE_SIZE)
+	var tail_size := _font.get_string_size(tail, HORIZONTAL_ALIGNMENT_LEFT, -1, LINE_SIZE)
+	var left := at.x - (head_size.x + tail_size.x) * 0.5
+	var baseline := at.y + head_size.y * 0.34
+	if mark != "":
+		var mark_size := _font.get_string_size(mark, HORIZONTAL_ALIGNMENT_LEFT, -1,
+				LINE_SIZE)
+		draw_string(_font, Vector2(left - mark_size.x, baseline), mark,
+				HORIZONTAL_ALIGNMENT_LEFT, -1.0, LINE_SIZE, head_colour)
+	draw_string(_font, Vector2(left, baseline), head, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+			LINE_SIZE, head_colour)
+	if tail != "":
+		draw_string(_font, Vector2(left + head_size.x, baseline), tail,
+				HORIZONTAL_ALIGNMENT_LEFT, -1.0, LINE_SIZE, tail_colour)
+
+
+## One trigram, drawn as its three 爻 rather than written. The bars are turned with
+## the card (用户 2026-10-09 第十二轮: 八卦符号还是旋转的) - a 卦 reads the way round
+## the dial does, unlike the 神/星/门 blocks beside it. `mask` has one bit per 爻, bit
+## 0 the bottom one - set means the 爻 is solid (天/阳), clear means it is broken
+## (地/阴), and the broken one leaves a gap in its middle as the character does.
+## 13 x 11 px, centred on `at` (the font has no ☰..☷, so this is the only way the
+## dial can carry the 卦).
+func _trigram(at: Vector2, angle: float, mask: int, colour: Color) -> void:
+	draw_set_transform(at, angle, Vector2.ONE)
+	var half := TRIGRAM_W * 0.5
+	var break_half := TRIGRAM_GAP * 0.5
+	for line in 3:
+		var y := (1.0 - float(line)) * TRIGRAM_PITCH - TRIGRAM_H * 0.5
+		if mask & (1 << line) != 0:
+			draw_rect(Rect2(-half, y, TRIGRAM_W, TRIGRAM_H), colour, true)
+		else:
+			draw_rect(Rect2(-half, y, half - break_half, TRIGRAM_H), colour, true)
+			draw_rect(Rect2(break_half, y, half - break_half, TRIGRAM_H), colour, true)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## One of the card's four direction triangles (2026-10-10 第十五轮). It is a real
+## Button because that is how the HUD window tells a control a background put up
+## from its own drag handle (`HudWindow._control_at`) - and the theme is made to draw
+## nothing of it: the triangle is the whole control, so every stylebox is emptied
+## here rather than a box being painted around the mark. `out` is the way the point
+## faces (away from the card's centre) and `at` where the mark stands inside the
+## button; the parent hands both over, so neither the drawing nor the geometry has to
+## guess at the other.
+class DirectionButton extends Button:
+	const TIP := 4.0    ## the apex, this far past the mark's centre along `out`
+	const BASE := 4.0   ## the base, this far behind it
+	const SIDE := 5.0   ## and half the base's width
+
+	var out := Vector2.ZERO
+	var at := Vector2.ZERO
+	var colour := Color.WHITE
+
+	func _init() -> void:
+		for state in ["normal", "hover", "pressed", "focus", "disabled"]:
+			add_theme_stylebox_override(state, StyleBoxEmpty.new())
+
+	func _draw() -> void:
+		var side := Vector2(-out.y, out.x) * SIDE
+		var ink := colour.lightened(0.45) if is_hovered() or button_pressed else colour
+		draw_colored_polygon(PackedVector2Array([at + out * TIP, at - out * BASE + side,
+				at - out * BASE - side]), ink)

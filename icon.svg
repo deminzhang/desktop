@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- XuanDesk icon: 北斗七星 on a blue night sky.
+       Star geometry = real RA/Dec of the seven stars, projected with cos(Dec), rotated -25 deg,
+       then scaled to fill the tile; core radius follows visual magnitude:
+       天枢 Dubhe 1.79, 天璇 Merak 2.37, 天玑 Phecda 2.44, 天权 Megrez 3.31 (dimmest),
+       玉衡 Alioth 1.77 (brightest), 开阳 Mizar 2.23, 摇光 Alkaid 1.86.
+       Bowl: 天枢-天璇-天玑-天权; handle leaves the bowl at 天权 (Megrez). -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0.45" y2="1">
+      <stop offset="0" stop-color="#2f74e6"/>
+      <stop offset="0.55" stop-color="#1b47a0"/>
+      <stop offset="1" stop-color="#0a1e46"/>
+    </linearGradient>
+    <radialGradient id="sheen" cx="0.3" cy="0.12" r="0.9">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.75"/>
+      <stop offset="0.35" stop-color="#cfe4ff" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#9dc8ff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="128" height="128" rx="26" fill="url(#sky)"/>
+  <rect width="128" height="128" rx="26" fill="url(#sheen)"/>
+
+  <!-- faint field stars -->
+  <circle cx="18.8" cy="28.97" r="1.7" fill="#dce9ff" opacity="0.32"/>
+  <circle cx="27.84" cy="49.31" r="1.24" fill="#dce9ff" opacity="0.26"/>
+  <circle cx="110.33" cy="105.81" r="1.8" fill="#dce9ff" opacity="0.35"/>
+  <circle cx="108.07" cy="73.04" r="1.36" fill="#dce9ff" opacity="0.28"/>
+
+  <!-- 摇光 → 开阳 → 玉衡 (柄) → 天权 → 天玑 → 天璇 → 天枢 (魁);
+       天枢—天权 left unconnected: that is the 勺口, the bowl opens up-left, away from the handle -->
+  <path d="M25.47 108.07 28.35 81.13 42.55 69.57 61.53 55.92 79.01 63.07 102.54 39.75 92.13 19.93"
+        fill="none" stroke="#cfe3ff" stroke-opacity="0.5" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <g>
+    <circle cx="25.47" cy="108.07" r="15.59" fill="url(#glow)"/>
+    <circle cx="25.47" cy="108.07" r="4.86" fill="#f4faff"/>
+    <circle cx="28.35" cy="81.13" r="14.13" fill="url(#glow)"/>
+    <circle cx="28.35" cy="81.13" r="4.41" fill="#f4faff"/>
+    <circle cx="42.55" cy="69.57" r="16.27" fill="url(#glow)"/>
+    <circle cx="42.55" cy="69.57" r="5.09" fill="#ffffff"/>
+    <circle cx="61.53" cy="55.92" r="11.19" fill="url(#glow)"/>
+    <circle cx="61.53" cy="55.92" r="3.5" fill="#e8f3ff"/>
+    <circle cx="79.01" cy="63.07" r="13.33" fill="url(#glow)"/>
+    <circle cx="79.01" cy="63.07" r="4.18" fill="#f4faff"/>
+    <circle cx="102.54" cy="39.75" r="14.13" fill="url(#glow)"/>
+    <circle cx="102.54" cy="39.75" r="4.41" fill="#f4faff"/>
+    <circle cx="92.13" cy="19.93" r="15.93" fill="url(#glow)"/>
+    <circle cx="92.13" cy="19.93" r="4.97" fill="#ffffff"/>
+  </g>
+</svg>
