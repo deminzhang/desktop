@@ -28,9 +28,11 @@ func _ready() -> void:
 	_shot = opts.has("shot")
 	_setup_wallpaper_window()
 
+	var build_t0 := Time.get_ticks_msec()
 	aquarium = Aquarium.new()
 	aquarium.name = "Aquarium"
 	add_child(aquarium)
+	print("XuanDesk: aquarium built in %d ms" % (Time.get_ticks_msec() - build_t0))
 	_add_vignette()
 
 	if _flag("hud", true):
