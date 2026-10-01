@@ -10,12 +10,13 @@
 ## (Astro.sky_basis), which is why the sphere can idle between frames.
 ##
 ## S1 brought the BSC5 star field, S2 the constellations, S3 this clockwork; S4
-## the Sun, the Moon and the daylight they bring, S5 the planets, S6 the ecliptic
-## and the twenty-eight 宿, S7 the compass HUD - whose rings are a 奇门 chart and a
-## 大六壬 chart cast for the sky's own instant (`_chart`), the 大六壬 one also
-## standing over the horizon as the heaven ring of branches, and whose marks outside
-## them are the bodies, the Sun, the Moon and the seven planets, on the bearings the
-## sky has them on.
+## the Sun, the Moon and the daylight they bring - and the Moon's own orbit, the one
+## line the sky draws that belongs to a body rather than to the sphere (2026-10-10);
+## S5 the planets, S6 the ecliptic and the twenty-eight 宿, S7 the compass HUD - whose
+## rings are a 奇门 chart and a 大六壬 chart cast for the sky's own instant
+## (`_chart`), the 大六壬 one also standing over the horizon as the heaven ring of
+## branches, and whose marks outside them are the bodies, the Sun, the Moon and the
+## seven planets, on the bearings the sky has them on.
 ##
 ## Named SkyBackground because `Sky` is the engine's sky resource.
 class_name SkyBackground
@@ -46,6 +47,14 @@ const EQUATOR_COLOUR := Color(0.030, 0.044, 0.076)
 const MANSION_TICK := 1.4
 const MANSION_TICK_WIDTH := 0.34
 const MANSION_COLOUR := Color(0.098, 0.068, 0.026)
+## The 宿's own star groups (MansionFigures): drawn in the amber the 宿's scale is
+## drawn in rather than the blue of the 88 IAU figures, so the Chinese sky reads as
+## one layer - its divisions and the figures that stand in them. Brighter than the
+## scale is, because a figure is the thing being read and the scale is what it is
+## read against: at the figures' own brightness the amber came out a washed grey
+## against the blue of the night (measured on the 2026-10-10 shot).
+const MANSION_FIGURE_WIDTH := 0.40
+const MANSION_FIGURE_COLOUR := Color(0.20, 0.10, 0.028)
 
 var sky_root: Node3D
 var camera: Camera3D
@@ -73,6 +82,10 @@ var _time_bar: SkyTimeBar
 var _mansions: Mansions
 var _equator: MeshInstance3D
 var _mansion_ticks: MeshInstance3D
+## The 宿's own star groups (MansionFigures) and whether they are drawn: the 菜单's
+## 星宿 switch, the counterpart of the 星座 one.
+var _mansion_figures: MeshInstance3D
+var _mansion_figures_shown := true
 var _pan: Dictionary = {}      ## the 奇门 chart of the drawn instant (S7)
 var _liuren: Dictionary = {}   ## the 大六壬 chart of the drawn instant
 var _chart_key := ""
@@ -116,6 +129,7 @@ func build(_host: Node) -> void:
 	_build_clock()
 	_build_ecliptic()
 	_build_mansions()
+	_build_mansion_figures()
 
 
 func build_hud() -> Control:
@@ -159,24 +173,36 @@ func hud_size() -> Vector2i:
 	return Vector2i(300, 340)
 
 
-## The one switch the sky offers the 菜单 (`Background.menu_switches`): the 88
-## constellation figures and the Chinese names over them, which are the two layers
-## the sky can do without. The stars, the branch rings and the compass card are
-## not touched by it.
+## The switches the sky offers the 菜单 (`Background.menu_switches`): the 88
+## constellation figures with their Chinese names, and the 宿's own star groups
+## (MansionFigures) - the two layers the sky can do without, and the pair the two
+## names of the sky's line work are turned off by. The stars, the branch rings and the
+## compass card are not touched by either.
 func menu_switches() -> Array:
-	return [{"id": "figures", "label": "星座", "on": _figures_shown}]
+	return [{"id": "figures", "label": "星座", "on": _figures_shown},
+			{"id": "mansions", "label": "星宿", "on": _mansion_figures_shown}]
 
 
 func set_menu_switch(id: String, on: bool) -> void:
-	if id != "figures":
-		return
-	_figures_shown = on
-	if _figures != null:
-		_figures.visible = on
-	if _labels != null:
-		# the 星座 switch takes the figures and their 88 names, and leaves the 宿's
-		# scale and the planets' names on the sky (SkyLabels.set_figures)
-		_labels.set_figures(on)
+	match id:
+		"figures":
+			_figures_shown = on
+			if _figures != null:
+				_figures.visible = on
+			# the 星座 switch takes the figures and their 88 names, and leaves the 宿's
+			# scale and the planets' names on the sky (SkyLabels.set_figures)
+			if _labels != null:
+				_labels.set_figures(on)
+		"mansions":
+			_mansion_figures_shown = on
+			if _mansion_figures != null:
+				_mansion_figures.visible = on
+			# the 星宿 switch takes the 宿's ribbons and their 星官 names, and leaves the
+			# 宿's scale on the sky (the same split as 星座)
+			if _labels != null:
+				_labels.set_mansion_figures_shown(on)
+		_:
+			return
 	# the wallpaper idles between time steps, so a change of its own has to ask
 	# for the frame that shows it (Policy.ON_DEMAND)
 	request_redraw()
@@ -271,6 +297,11 @@ func _build_catalogue() -> void:
 	var lines := SkyLines.build(sky_root, _catalogue, boundaries)
 	_figures = lines[0]
 	_boundaries = lines[1]
+	# the 88 figures can be left off from the command line as well as from the 菜单.
+	# The 宿's own figures are drawn either way, so a shot that has to show them wants
+	# the blue out of the way (the same reason --sky-boundaries exists).
+	_figures_shown = opts == null or opts.flag("sky_figures", true)
+	_figures.visible = _figures_shown
 	print("XuanDesk: sky: %d stars, %d figure segments, %d boundary segments"
 			% [star_count, _ribs(_figures), 0 if _boundaries == null \
 					else _ribs(_boundaries)])
@@ -334,10 +365,44 @@ func _build_mansions() -> void:
 			% [Mansions.NAMES.size(), _mansions.span(19), _mansions.span(21)])
 
 
+## The 宿's own star groups (MansionFigures): the 星官 drawn as lines between their
+## stars - 角宿's 角, 库楼, 柱 and the rest - which is the Chinese counterpart of the 88
+## IAU figures and the layer that makes a 宿 the shape it is named for rather than
+## just a span of right ascension. Static geometry in the catalogue frame, and on the
+## same layer list as the rest, so it dims with the daylight and scales with the zoom.
+##
+## The figures need nothing but the catalogue, so unlike the divisions next door they
+## are drawn even when a 距星 is missing. A 星官 the catalogue cannot place is reported
+## by MansionFigures and left out whole.
+func _build_mansion_figures() -> void:
+	if _catalogue == null:
+		return
+	var chains := MansionFigures.chains(_catalogue)
+	if chains.is_empty():
+		return
+	_mansion_figures = SkyLines.polyline_layer(sky_root, chains, MANSION_FIGURE_WIDTH,
+			MANSION_FIGURE_COLOUR, "MansionFigures")
+	# the ribbons come with their names: a 宿 is a dozen 星官, and 2 to 10 stars that
+	# are not named read as loose strokes (the 88 have had their names since S2 for the
+	# same reason)
+	if _labels != null:
+		_labels.set_mansion_figures(MansionFigures.anchors(_catalogue))
+	var names := []
+	var guan := 0
+	var stars := 0
+	for mansion: String in MansionFigures.mansions():
+		names.append(mansion + "宿")
+		guan += MansionFigures.guan_count(mansion)
+		stars += MansionFigures.star_count(mansion)
+	print("XuanDesk: sky: 星宿图 %s: %d 星官 %d 星, %d 段"
+			% ["/".join(names), guan, stars, _ribs(_mansion_figures)])
+
+
 ## The layers that carry the night's light and the zoom's scale: the stars and
 ## everything drawn as ribbons on the sphere.
 func _marked_layers() -> Array:
-	var layers := [_stars, _figures, _boundaries, _equator, _mansion_ticks]
+	var layers := [_stars, _figures, _boundaries, _equator, _mansion_ticks,
+			_mansion_figures]
 	layers.append_array(_ecliptic)
 	return layers
 
@@ -364,6 +429,7 @@ func _build_labels() -> void:
 	layer.add_child(labels)
 	_labels = labels
 	labels.setup(_catalogue, camera, sky_root)
+	labels.set_figures(_figures_shown)
 
 
 func _build_camera() -> void:
@@ -433,7 +499,7 @@ func _apply_time() -> void:
 	planets.place(jd)
 	_light()
 	_bodies()
-	_planet_labels()
+	_body_labels()
 	_chart()
 	_on_view_changed()
 
@@ -474,11 +540,14 @@ func _mansion_marks(basis: Basis) -> Array:
 	return marks
 
 
-## The planets' names, ridden by the sphere like the constellation names: the one
-## thing on that layer that is not fixed to it.
-func _planet_labels() -> void:
+## The names of the bodies that are not pinned to the sphere - the Moon and the seven
+## planets - restated on every time step, for the same reason the marks are: they move.
+## The Moon is handed its drawn radius too, because its name sits over a disc rather
+## than over a point (SkyLabels.set_moon).
+func _body_labels() -> void:
 	if _labels == null:
 		return
+	_labels.set_moon(moon.direction, moon.disc_radius)
 	var entries := []
 	for state: SkyPlanets.PlanetState in planets.states:
 		entries.append({"name": state.name, "direction": state.direction})
@@ -571,6 +640,10 @@ func _light() -> void:
 			layer.material_override.set_shader_parameter("night", night)
 	if planets != null:
 		planets.set_night(night)
+	if moon != null:
+		# the Moon's orbit is the one line on the sky that is a body's own; the disc
+		# is not dimmed by daylight, the ribbon is
+		moon.set_night(night)
 
 
 ## The sky is redrawn only when it actually changes - a new instant, or a camera
@@ -594,6 +667,8 @@ func _scale_marks() -> void:
 			layer.material_override.set_shader_parameter("size_scale", scale)
 	if planets != null:
 		planets.set_zoom(scale)
+	if moon != null:
+		moon.set_zoom(scale)
 
 
 func _unhandled_input(event: InputEvent) -> void:

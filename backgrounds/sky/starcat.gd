@@ -133,6 +133,17 @@ func find_flamsteed(number: int, constellation: String) -> int:
 	return -1
 
 
+## Index of the star with this HR number, or -1. The catalogue's own primary key,
+## and the only way to name the handful of stars whose Bayer letter is a Latin one
+## (g Cen, d Cen, ...): BSC5 writes those out as Greek letters or Flamsteed numbers
+## or not at all, so MansionFigures resolves them through their HR number.
+func find_hr(number: int) -> int:
+	for i in count():
+		if hr[i] == number:
+			return i
+	return -1
+
+
 ## Star indices per constellation abbreviation, from the catalogue's own names.
 func members() -> Dictionary:
 	var out := {}
