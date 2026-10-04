@@ -37,21 +37,6 @@ const TICK_WIDTH := 0.40
 const TICK_LONG := 0.75
 const TICK_SHORT := 0.45
 
-## The vernal equinox (2026-10-10): λ = 0 already carries a tick like every other
-## solar term, and a tick among twenty-four of them says nothing about which is the
-## origin - so the point itself is ringed, in the one colour on the sky that is the
-## chrome's rather than the sky's (SkyLabels names it 春分点). Both the ring and the
-## name are built for the sky's own instant, so they sit on the same point the λ the
-## HUD reads is measured from.
-##
-## The ring is a small circle *in λ/β*: 1.1° of longitude by 1.1° of latitude makes
-## a parallelogram 1.1° wide and 1.1°·cos(β) tall, which at this size rounds to a
-## circle on the screen (0.02° of difference over a ring 0.04° across).
-const EQUINOX_RING_DEG := 1.1
-const EQUINOX_SEGMENTS := 12
-const EQUINOX_WIDTH := 0.40
-const EQUINOX_COLOUR := Color(0.073, 0.680, 1.000)   ## the HUD's accent, linear
-
 ## Additive and dim like the figures, but warm: the ecliptic is the one line on
 ## the sky that is about the Sun. Linear, like every vertex colour in the sky
 ## (计划 §2.3 G4).
@@ -79,6 +64,26 @@ static func sign_longitude(index: int) -> float:
 ## Longitude at which solar term `index` begins: 0 = 春分, at λ = 0.
 static func term_longitude(index: int) -> float:
 	return float(index) * 15.0
+
+
+## The two equinoxes and the two solstices (2026-10-12): the four signs' quarters,
+## λ = 0 / 90 / 180 / 270. They are four of the 中气, and λ = 0 carries a tick like
+## every other term - a tick among twenty-four says nothing about which way the
+## circle is read, so the four points are named on the sky as well (SkyLabels). The
+## names come off TERMS, every sixth entry, rather than a second table that could
+## drift from it.
+const CARDINAL_STEP := 90.0
+
+
+## The four cardinal points as [name, direction] pairs, at λ = 90° x index, in the
+## catalogue frame of the equinox of `jd` - the same fold the circle and its ticks
+## take, so a name stands on the point the HUD's own readings of λ are measured from.
+static func cardinal_points(jd: float) -> Array:
+	var points := []
+	for quarter in 4:
+		points.append({"name": TERMS[quarter * 6],
+				"direction": direction(jd, CARDINAL_STEP * float(quarter))})
+	return points
 
 
 ## Which sign a longitude falls in (0..11), and its name.
@@ -119,17 +124,10 @@ static func pole(jd: float) -> Vector3:
 	return Astro.local_from_date(jd, 270.0, 90.0 - Astro.obliquity_deg(jd))
 
 
-## The vernal equinox: the point λ = 0, β = 0 of the equinox of `jd`, in the
-## catalogue frame - what the ring and the 春分点 name are both placed on.
-static func vernal_equinox(jd: float) -> Vector3:
-	return direction(jd, 0.0)
-
-
 ## The ecliptic as geometry under `parent` (SkyRoot) for the instant `jd`: the
-## great circle walked in one-degree steps, a tick across it at each of the
-## twenty-four solar terms, and a ring round the vernal equinox. Returns the three
-## layers so the sky can feed them the light of day and the zoom, the way it does
-## the figures.
+## great circle walked in one-degree steps and a tick across it at each of the
+## twenty-four solar terms. Returns the two layers so the sky can feed them the
+## light of day and the zoom, the way it does the figures.
 ##
 ## Static from here on: the wall clock's own drift through the precession is
 ## 0.0001 deg a day, so the layer is built once and only ever turns with SkyRoot.
@@ -145,12 +143,4 @@ static func build(parent: Node3D, jd: float) -> Array:
 		var reach := TICK_LONG if i % 2 == 0 else TICK_SHORT
 		ticks.append([point(jd, lambda, -reach), point(jd, lambda, reach)])
 	var marks := SkyLines.polyline_layer(parent, ticks, TICK_WIDTH, COLOUR, "EclipticTerms")
-
-	var ring := []
-	for i in EQUINOX_SEGMENTS + 1:
-		var angle := TAU * float(i) / float(EQUINOX_SEGMENTS)
-		ring.append(point(jd, EQUINOX_RING_DEG * cos(angle),
-				EQUINOX_RING_DEG * sin(angle)))
-	var equinox := SkyLines.polyline_layer(parent, [ring], EQUINOX_WIDTH,
-			EQUINOX_COLOUR, "EclipticEquinox")
-	return [circle, marks, equinox]
+	return [circle, marks]

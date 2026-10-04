@@ -18,7 +18,14 @@ coverage.*
 *.coverprofile
 profile.cov
 .godot
-shots/*
+.tmp
+# .tmp/ is **temporary by definition** (用户 2026-10-13: "这些临时目录都转到 .tmp 里"): a
+# screenshot (shots/), a probe or scratch scene (tests/) or a helper script (tools/) is made
+# for one round, measured, recorded in 计划.md + README, and then thrown away. Nothing under it
+# ever goes into git, so nothing a *clone* needs may live there - a file that has to stay
+# belongs with the thing it belongs to (backgrounds/<id>/ or shell/). The sky's projection
+# probe is the case in point: it started as `.tmp/tests/sky_projection_probe.gd` and now lives
+# at `backgrounds/sky/projection_probe.gd`. `.tmp/.gdignore` keeps the importer out of the lot.
 
 
 # Dependency directories (remove the comment below to include it)

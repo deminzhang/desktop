@@ -45,7 +45,18 @@ const TURN_SNAP := 0.02
 ## point a point and a hairline a hairline at any zoom.
 const BASE_FOV := 60.0
 const FOV_MIN := 12.0
-const FOV_MAX := 110.0
+## The widest field the rig will hold: 179, which is the engine's own ceiling
+## (`Camera3D.fov` refuses anything past it), so a caller asking for 180 gets the
+## widest there is instead of a rejected set that leaves the camera where it was.
+##
+## What a field that wide is *for*: the maps that put the angle itself on the frame
+## (`pan`, `cylinder`, `sphere`) hold it without trouble, and 用户 asked for it
+## (2026-10-12: "fov改180") to get the horizon's whole southern half on the frame at
+## once. The camera's own lens is past the useful part of its range long before this -
+## it diverges at 180, and at 179 it crams everything within ~45 deg of the axis into
+## a few pixels in the middle (measured) - so the opening stays OPENING_FOV, and the
+## ceiling is a capability rather than a composition.
+const FOV_MAX := 179.0
 const ALTITUDE_MIN := 0.0
 const ALTITUDE_MAX := 90.0
 
@@ -65,10 +76,24 @@ const CARDINALS := {
 ## zenith itself sits inside the frame and S4's sliver of ground stays at the
 ## bottom.
 ##
+## Both edges are read along the frame's vertical column, which is the one line the
+## sky's own map leaves the lens' angles on (shaders/sky_projection.gdshaderinc):
+## what the frame holds either side of that column is *wider* than the lens would
+## have shown, and at this field the sides of the frame come down to the horizon -
+## the sky is drawn at one scale instead of swelling towards the edges, and the
+## reach is what that costs.
+##
 ## What the sky sends to the wallpaper is a camera looking up, not a sky with a
 ## low horizon - the horizon itself is where the observer's own is.
 const OPENING_ALTITUDE := 45.0
-const OPENING_FOV := 100.0
+## 110 deg, 用户's own figure for this view (.tmp/tests/sample.tscn's Camera3D) and the widest
+## field the sky is worth opening at: the frame then runs from 10 deg of ground at the
+## bottom to 10 deg past the zenith at the top, and the horizon's own row reaches out to
+## 79 deg either side of south - so the Sun *rises into* the frame at the lower left
+## instead of arriving from the side, which is what 100 deg was too narrow for (measured:
+## at 100 the row stops at 65 deg and the Sun enters at the middle of the left edge).
+## Wider still and the frame's corners swell without buying any more of the ring.
+const OPENING_FOV := 110.0
 var azimuth := 180.0
 var altitude := OPENING_ALTITUDE
 var fov := OPENING_FOV

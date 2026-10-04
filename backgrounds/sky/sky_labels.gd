@@ -50,7 +50,7 @@ const MOON_NAME := "月"
 ## point the whole sphere is read against - 北极星 is what "north" means on a star
 ## chart, and the compass HUD's own reading is checked against its altitude.
 ##
-## It is a star and not a figure, so the 菜单's 星座 switch does not touch it (the
+## It is a star and not a figure, so the card's 星座 switch does not touch it (the
 ## same reason the 宿 and the planets stay): the switch takes the eighty-eight
 ## constellations' names, and this one is not one of them.
 const POLARIS_SIZE := 15
@@ -58,13 +58,71 @@ const POLARIS_LIFT := 11.0
 const POLARIS_COLOUR := Color(0.92, 0.96, 1.00, 0.95)
 const POLARIS_NAME := "北极星"
 
-## The vernal equinox - the point λ = 0 the ecliptic's own divisions are measured
-## from - in the accent the HUD chrome uses: it is the sky's own mark, not a thing
-## in it, and Ecliptic draws the ring this name sits under.
-const EQUINOX_SIZE := 14
-const EQUINOX_LIFT := 13.0
-const EQUINOX_COLOUR := Color(0.42, 0.88, 1.00, 0.95)
-const EQUINOX_NAME := "春分"
+## 北斗 (2026-10-12 第二十一轮: "北斗星名加一下"): the Dipper, named the way 北极星 is -
+## the sky writes two star names of its own and both are the ones a naked-eye reader
+## navigates by, the Dipper's two bowl stars being what points at the pole star.
+##
+## Named at the asterism's centre of figure rather than at any one of its stars: the
+## seven are spread over 25 deg, so a name hung on α UMa alone would read as that
+## star's and not the shape's. Like the pole star it is a star, not a figure, so the
+## 星座 switch leaves it alone - but the card's 星宿 switch does not, because the names
+## it gives way to are that switch's (see DIPPER_STARS).
+const DIPPER_SIZE := 15
+const DIPPER_LIFT := 11.0
+const DIPPER_COLOUR := Color(0.92, 0.96, 1.00, 0.95)
+const DIPPER_NAME := "北斗"
+
+## 北斗九星 (2026-10-12 第二十一轮: "北斗在星宿开关开时，显示北斗九星的名字"): the
+## Dipper's own stars, named one by one. They are the Chinese sky's own names and they
+## go on the card's 星宿 switch with the 宿's and the 星官's - the 斗 is the shape those
+## names are read in. While that switch is off the single 北斗 above stands in for
+## them (it is the asterism, and the nine are the detail).
+##
+## Each entry carries the catalogue's own designation - a Bayer letter, or the
+## Flamsteed number for 左辅, which has no letter - and the name the tradition gives
+## that star. 天枢 α, 天璇 β, 天玑 γ and 天权 δ draw the 斗's bowl, 玉衡 ε, 开阳 ζ and
+## 摇光 η its handle, and 左辅 is the small star beside 开阳 (Alcor, 80 UMa): the
+## eighth of the 九星.
+##
+## The ninth is 右弼, which the tradition itself calls the *unseen* one - there is no
+## star where it belongs, and this layer names stars, so eight are drawn. (The rule is
+## the sky's own: a name is not drawn for a star that is not there, which is why the
+## pole star's name is dropped rather than guessed when α UMi is missing.)
+## 左辅's own lift (the `lift` field in its DIPPER_STARS entry): Alcor stands 12 arcmin
+## from 开阳 - 1.4 px at the opening field - so a name hung over both stars is a name
+## drawn twice on the same spot, and the layer drops the second. Hanging the eighth
+## *below* its star puts its box clear of 开阳's instead, which is what the tradition
+## itself does with it (左辅 is read as 开阳's attendant, not as a star of its own).
+const DIPPER_ATTENDANT_LIFT := -14.0
+const DIPPER_STARS := [
+	{"letter": "α", "number": 0, "name": "天枢"},
+	{"letter": "β", "number": 0, "name": "天璇"},
+	{"letter": "γ", "number": 0, "name": "天玑"},
+	{"letter": "δ", "number": 0, "name": "天权"},
+	{"letter": "ε", "number": 0, "name": "玉衡"},
+	{"letter": "ζ", "number": 0, "name": "开阳"},
+	{"letter": "η", "number": 0, "name": "摇光"},
+	{"letter": "", "number": 80, "name": "左辅", "lift": DIPPER_ATTENDANT_LIFT},
+]
+## How many of DIPPER_STARS draw the 斗 itself: the rest (左辅) stands off to the side,
+## so the asterism's own name is the mean of these.
+const DIPPER_SEVEN := 7
+const DIPPER_ABBREV := "UMa"
+## One named star of the 斗: a step smaller than the asterism's own name, in the ink
+## the two star names are written in - so the nine read as stars where the 宿 and 星官
+## names beside them read as the amber divisions they are.
+const DIPPER_STAR_SIZE := 12
+const DIPPER_STAR_LIFT := 9.0
+const DIPPER_STAR_COLOUR := Color(0.86, 0.92, 1.00, 0.82)
+
+## The four cardinal points of the ecliptic - the two equinoxes and the two
+## solstices, the signs' quarters - in the accent the HUD chrome uses: they are the
+## sky's own marks, not things in it, and Ecliptic hands over the points the λ it
+## measures is read from. All four are named; the points themselves carry the same
+## tick every other solar term does.
+const CARDINAL_SIZE := 14
+const CARDINAL_LIFT := 13.0
+const CARDINAL_COLOUR := Color(0.42, 0.88, 1.00, 0.95)
 
 ## The zenith (2026-10-10): the point straight up has no star on it, and it is
 ## where the HUD's 天顶 button aims the view - so the sky hangs a hollow cross on
@@ -94,19 +152,29 @@ var _planets: Array = []    ## [{name, direction}], the seven, restated every st
 ## every step with the planets - it is not pinned to the sphere either.
 var _moon: Variant = null
 var _moon_radius := 0.0
-var _mansions: Array = []   ## [{name, direction}], the twenty-eight, fixed
+## The twenty-eight 宿's own names, [{name, direction}], fixed to the sphere like the
+## 宿 themselves - and whether they are drawn, which is the card's 星宿 switch (用户
+## 2026-10-12 第二十一轮: 28宿名只在星宿开着时显).
+var _mansions: Array = []
 ## The 星官 names of the 宿 the sky draws (MansionFigures), [{name, direction}] each,
-## and whether they are drawn: the 菜单's 星宿 switch, which the sky hands over with
-## the ribbons themselves.
+## drawn on that same 星宿 switch, which the sky hands over with the ribbons
+## themselves.
 var _mansion_figures: Array = []
-var _mansion_figures_shown := true
+var _mansions_shown := true
 ## The pole star's own direction on the sphere (α UMi out of the catalogue), or
 ## null when it is not in the catalogue: a name is not drawn for a star that is
 ## not there.
 var _polaris: Variant = null
-## The vernal equinox's direction, handed over by the sky with the ecliptic it is
-## measured from - Ecliptic draws the ring, this draws the name under it.
-var _equinox: Variant = null
+## 北斗's own direction: the mean of the seven stars' directions, or null when the
+## catalogue holds none of them.
+var _dipper: Variant = null
+## The 斗's stars as names, [{name, direction}], one per star the catalogue holds:
+## drawn on the card's 星宿 switch, with the asterism's own name standing in for them
+## while that switch is off.
+var _dipper_names: Array = []
+## The ecliptic's four cardinal points, handed over by the sky with the ecliptic
+## they are measured on - Ecliptic draws the ticks, this draws the names.
+var _cardinals: Array = []
 ## Whether the 88 constellation names are drawn: the 菜单's 星座 switch, which is
 ## about the constellations alone. The 宿 and the planets stay - they are not
 ## figures, and a switch that took them off with the figures would be lying about
@@ -131,11 +199,67 @@ func setup(catalogue: StarCat, camera_3d: Camera3D, root: Node3D) -> void:
 		push_warning("XuanDesk: sky: 北极星 (α UMi) not in the catalogue, name dropped")
 	else:
 		_polaris = StarCat.direction(catalogue.ra[polaris], catalogue.dec[polaris])
+	_dipper = _dipper_direction(catalogue)
+	_dipper_names = _dipper_star_names(catalogue)
 	# a Control under a CanvasLayer gets no layout from a Control parent, so it
 	# takes the viewport's size and follows it
 	_follow_viewport()
 	get_viewport().size_changed.connect(_follow_viewport)
 	refresh()
+
+
+## Where 北斗's name stands: the mean of the 斗's own seven stars' directions on the
+## sphere - the asterism's centre of figure, which is the only point it has (the seven
+## are a shape, not a body). A star the catalogue is missing is left out of the sum; a
+## Dipper with none of its seven in the catalogue gets no name at all.
+static func _dipper_direction(catalogue: StarCat) -> Variant:
+	var sum := Vector3.ZERO
+	var found := 0
+	for i in DIPPER_SEVEN:
+		var index := _dipper_index(catalogue, DIPPER_STARS[i])
+		if index < 0:
+			continue
+		sum += StarCat.direction(catalogue.ra[index], catalogue.dec[index])
+		found += 1
+	if found == 0:
+		push_warning("XuanDesk: sky: 北斗七星 not in the catalogue, name dropped")
+		return null
+	return sum.normalized()
+
+
+## The 斗's own stars, each with its Chinese name: one entry per star the catalogue
+## holds, {name, direction} - the layer this is drawn on is the card's 星宿 switch (see
+## DIPPER_STARS). A star the catalogue is missing is dropped from its own list and
+## reported: the nine are the *names* of eight stars that are there, and inventing a
+## place for the one that has none is not this sky's business.
+static func _dipper_star_names(catalogue: StarCat) -> Array:
+	var out := []
+	var missing := []
+	for entry: Dictionary in DIPPER_STARS:
+		var index := _dipper_index(catalogue, entry)
+		if index < 0:
+			missing.append(String(entry["name"]))
+			continue
+		var named := {"name": String(entry["name"]),
+				"direction": StarCat.direction(catalogue.ra[index], catalogue.dec[index])}
+		# a star whose name cannot hang over it (左辅, on 开阳's shoulder) carries the
+		# lift its own entry asks for; the rest take the layer's own
+		if entry.has("lift"):
+			named["lift"] = float(entry["lift"])
+		out.append(named)
+	if not missing.is_empty():
+		push_warning("XuanDesk: sky: 北斗 %s not in the catalogue, their names dropped"
+				% "/".join(missing))
+	return out
+
+
+## The catalogue's row for one DIPPER_STARS entry: by Bayer letter, or by Flamsteed
+## number where the star has no letter (左辅/Alcor is 80 UMa).
+static func _dipper_index(catalogue: StarCat, entry: Dictionary) -> int:
+	var letter := String(entry["letter"])
+	if letter != "":
+		return catalogue.find(letter, DIPPER_ABBREV)
+	return catalogue.find_flamsteed(int(entry["number"]), DIPPER_ABBREV)
 
 
 ## The planets, in the order the sky keeps them: {name, direction} each, the
@@ -155,8 +279,8 @@ func set_moon(direction: Vector3, radius: float) -> void:
 	refresh()
 
 
-## The twenty-eight 宿, handed over once with their layer: their names stand at the
-## middle of their own span on the equator.
+## The twenty-eight 宿, handed over once with their layer: their names stand on the
+## 宿's own 星官 where the sky can place one, and at the middle of its span otherwise.
 func set_mansions(entries: Array) -> void:
 	_mansions = entries
 	refresh()
@@ -169,24 +293,27 @@ func set_mansion_figures(entries: Array) -> void:
 	refresh()
 
 
-## The 菜单's 星宿 switch, handed over by the sky with the figure layer itself: the 宿's
-## ribbons and their 星官 names go together (and the 宿's own scale, the 88's names and
-## the planets stay - the same rule the 星座 switch follows).
-func set_mansion_figures_shown(on: bool) -> void:
-	_mansion_figures_shown = on
+## The card's 星宿 switch, handed over by the sky with the figure layer itself: the
+## 宿's own names, their ribbons and their 星官 names go together (用户 2026-10-12
+## 第二十一轮: 28宿名只在星宿开着时显), and the 宿's *scale* - the equator and the 距星
+## ticks - stays on the sky alone, the same way the 星座 switch leaves the 宿 and the
+## planets (SkyLabels.set_figures).
+func set_mansions_shown(on: bool) -> void:
+	_mansions_shown = on
 	refresh()
 
 
-## The vernal equinox, handed over with the ecliptic: the point λ = 0, in the
-## catalogue frame at the sky's own instant, exactly the point Ecliptic's ring is
-## drawn round.
-func set_equinox(direction: Vector3) -> void:
-	_equinox = direction
+## The ecliptic's four cardinal points (Ecliptic.cardinal_points), handed over with
+## the ecliptic itself: the two equinoxes and the two solstices, in the catalogue
+## frame at the sky's own instant.
+func set_cardinals(entries: Array) -> void:
+	_cardinals = entries
 	refresh()
 
 
-## The 菜单's 星座 switch, handed over by the sky with the figure layer itself: the
-## figure ribbons and their 88 names go together, and nothing else does.
+## The card's 星座 switch, handed over by the sky with the figure layer itself: the
+## figure ribbons and their 88 names go together, and nothing else does - not the 宿
+## or their names, not the planets, not the two named stars.
 func set_figures(on: bool) -> void:
 	_figures_shown = on
 	refresh()
@@ -206,30 +333,45 @@ func _draw() -> void:
 		return
 	var basis := sky_root.global_transform.basis
 	var placed: Array[Rect2] = []
-	# The two single named marks first - the equinox and the pole star are one
-	# point each, and a name that yields is gone for good, while a planet's or a
-	# constellation's simply moves a few pixels (2026-10-10: 海王星 stands within a
-	# degree of the vernal equinox this decade, and took the row off 春分点). The
-	# Moon joins them: it is one body with a disc under its name, and the disc is
-	# what makes it the thing to look at. Then the seven planets and the 宿, then
-	# the plentiful layer (88 names), which is the one that makes way.
-	if _equinox != null:
-		_place({"name": EQUINOX_NAME, "direction": _equinox}, placed, basis,
-				EQUINOX_SIZE, EQUINOX_COLOUR, EQUINOX_LIFT)
+	# The six single named marks first - the four cardinal points of the ecliptic, the
+	# pole star and 北斗 are one point each, and a name that yields is gone for good,
+	# while a planet's or a constellation's simply moves a few pixels (2026-10-10:
+	# 海王星 stands within a degree of the vernal equinox this decade, and took the
+	# row off 春分). The Moon joins them: it is one body with a disc under its name,
+	# and the disc is what makes it the thing to look at. Then the seven planets and
+	# the 宿, then the plentiful layer (88 names), which is the one that makes way.
+	for entry in _cardinals:
+		_place(entry, placed, basis, CARDINAL_SIZE, CARDINAL_COLOUR, CARDINAL_LIFT)
 	if _polaris != null:
 		_place({"name": POLARIS_NAME, "direction": _polaris}, placed, basis,
 				POLARIS_SIZE, POLARIS_COLOUR, POLARIS_LIFT)
+	# 北斗九星, then 北斗 itself: the nine are the detail and the asterism is the same
+	# reading one level up, so the detail keeps its place and the asterism's own name
+	# yields to it where the two would stand on top of each other - 天权 δ is within a
+	# degree and a half of the seven's centre of figure, which at the opening field is
+	# 11 px, so there 北斗 does not get drawn. They are one switch apart all the same:
+	# the nine are the card's 星宿 layer (see DIPPER_STARS), the asterism is not.
+	if _mansions_shown:
+		for entry in _dipper_names:
+			_place(entry, placed, basis, DIPPER_STAR_SIZE, DIPPER_STAR_COLOUR,
+					float(entry.get("lift", DIPPER_STAR_LIFT)))
+	if _dipper != null:
+		_place({"name": DIPPER_NAME, "direction": _dipper}, placed, basis,
+				DIPPER_SIZE, DIPPER_COLOUR, DIPPER_LIFT)
 	if _moon != null:
 		_place({"name": MOON_NAME, "direction": _moon}, placed, basis, MOON_SIZE,
 				MOON_COLOUR, _moon_lift())
 	for entry in _planets:
 		_place(entry, placed, basis, PLANET_SIZE, PLANET_COLOUR, PLANET_LIFT)
-	for entry in _mansions:
+	# the 宿 and their 星官 are the card's 星宿 switch, both halves of it: the names of
+	# the divisions and the names of the star groups inside them are the same layer of
+	# reading, and the switch that takes the ribbons takes them
+	for entry in _mansions if _mansions_shown else []:
 		_place(entry, placed, basis, MANSION_SIZE, MANSION_COLOUR, MANSION_LIFT)
 	# the 星官 names come after the 宿's own scale (a 宿's name is what has to stay
 	# readable) and before the 88, which are the most plentiful layer here and the one
 	# that makes way for both
-	for entry in _mansion_figures if _mansion_figures_shown else []:
+	for entry in _mansion_figures if _mansions_shown else []:
 		_place(entry, placed, basis, MANSION_FIGURE_SIZE, MANSION_FIGURE_COLOUR,
 				MANSION_FIGURE_LIFT)
 
@@ -242,21 +384,17 @@ func _draw() -> void:
 
 
 ## How far above the Moon's point its name stands: the sky's own lift plus the disc
-## it has to clear, in pixels. The disc is drawn MAGNIFY times its true size
-## (SkyMoon) and grows with the field of view, so a constant lift would put the name
-## on the Moon's face as soon as the sky is zoomed in.
+## it has to clear, in pixels. The disc is drawn MAGNIFY times its true size (SkyMoon)
+## and so it grows on screen as the sky is zoomed in - a constant lift would put the
+## name on the Moon's face at the first notch of the wheel.
 ##
-## The disc's world radius is at SkyMoon.RADIUS while this layer measures at the
-## star sphere's - a 4 per cent difference in the scale, which is nothing against a
-## gap that is about clearing the disc at all.
+## The disc's world radius is at SkyMoon.RADIUS while this layer measures at the star
+## sphere's - a 4 per cent difference in the scale, which is nothing against a gap
+## that is about clearing the disc at all.
 func _moon_lift() -> float:
 	if camera == null or not is_instance_valid(camera):
 		return MOON_LIFT
-	var half := camera.fov * 0.5
-	if half <= 0.0 or half >= 89.0:
-		return MOON_LIFT
-	var per_unit := size.y * 0.5 / (RADIUS * tan(deg_to_rad(half)))
-	return MOON_LIFT + _moon_radius * per_unit
+	return MOON_LIFT + _moon_radius * SkyProjection.pixels_per_unit(camera, size, RADIUS)
 
 
 ## The hollow cross on the observer's own zenith. The zenith is the pole of the
@@ -264,10 +402,7 @@ func _moon_lift() -> float:
 ## without SkyRoot's own turn - straight up stays straight up however the sky is
 ## turned under it.
 func _draw_zenith() -> void:
-	var world := Vector3.UP * RADIUS
-	if camera.is_position_behind(world):
-		return
-	var at := camera.unproject_position(world)
+	var at := SkyProjection.screen_point(camera, Vector3.UP * RADIUS, size)
 	var reach := ZENITH_GAP + float(ZENITH_DASHES) * (ZENITH_DASH + ZENITH_SPACE)
 	var corner := Vector2(reach, reach)
 	if not Rect2(Vector2.ZERO, size).intersects(Rect2(at - corner, corner * 2.0)):
@@ -293,9 +428,7 @@ func _place(entry: Dictionary, placed: Array[Rect2], basis: Basis, font_size: in
 	if altitude <= 0.0:
 		return
 	var world := sky_root.global_transform * (direction * RADIUS)
-	if camera.is_position_behind(world):
-		return
-	var at := camera.unproject_position(world)
+	var at := SkyProjection.screen_point(camera, world, size)
 	var text := String(entry["name"])
 	var extent := _font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
 	var box := Rect2(at.x - extent.x * 0.5, at.y - extent.y * 0.5 - lift, extent.x,

@@ -1,0 +1,8 @@
+/* The tray icon's own icon resource: compiled into bin/host.exe by the same gcc
+ * line that builds it (`native/tray.rc` on the command line - the mingw driver
+ * runs windres on .rc inputs), so the process carries its tray icon and never
+ * has to find a file beside itself at run time.
+ *
+ * 1 is the resource id the host loads: LoadIconW(hinst, MAKEINTRESOURCEW(1)).
+ */
+1 ICON "xuandesk.ico"

@@ -60,6 +60,11 @@ const KONG_WANG: Dictionary = {
 ## (`GanZhi.of`), each carrying the heaven branch over it, the stem the day's 旬
 ## 遁s there, and the 天将 riding it - the dial's one-character name in `god` and
 ## the full one in `god_name`. `slots[0]` is 地盘子; 空亡 stems come out 〇.
+##
+## Two of the twelve are the ones the plate is read for, and each says so itself
+## rather than leaving the dial to work it out: `guide` is true on the slot the
+## 贵人 rides, and `general` on the slot the 月将 has been laid on - which is the
+## 时辰's own 支, 月将加时 standing the 月将 over it.
 static func pan(pillars: Dictionary) -> Dictionary:
 	var hour_branch := int(pillars.get("hour_branch", 0))
 	var day: String = str(pillars.get("day", "甲子"))
@@ -84,7 +89,8 @@ static func pan(pillars: Dictionary) -> Dictionary:
 	var xun_start := posmod(day_branch - GAN.find(day_gan), 12)
 	var kong: Array = KONG_WANG["甲" + ZHI[xun_start]]
 
-	var gods := _gods(day_gan, hour_branch, turn)
+	var home := _guide_home(day_gan, hour_branch, turn)
+	var gods := _gods(home)
 	var slots: Array = []
 	for b in 12:
 		var branch: String = ZHI[(b + turn) % 12]
@@ -93,21 +99,29 @@ static func pan(pillars: Dictionary) -> Dictionary:
 			"stem": "〇" if kong.has(branch) else GAN[posmod(ZHI.find(branch) - xun_start, 12)],
 			"god": GODS[gods[b]],
 			"god_name": GOD_NAMES[gods[b]],
+			"guide": b == home,
+			"general": branch == month_general,
 		})
 	return {"month_general": month_general, "slots": slots}
 
 
-## 起贵人布天将: the 贵人歌诀 gives the day stem a branch, whichever of the two the
-## 时辰's half of the day calls for (卯..申 昼, 酉..寅 夜). The 贵人 rides the earth
-## palace holding that branch as its heaven branch, and from 亥子丑寅卯辰 it leads
-## the twelve 顺行 while from 巳午未申酉戌 it leads them 逆行 (reference `_calc_gui_ren`).
-## The 天将 come back as indexes into `GODS`/`GOD_NAMES`, one per 地盘子.
-static func _gods(day_gan: String, hour_branch: int, turn: int) -> PackedInt32Array:
+## The 地盘子 the 贵人 rides. 起贵人: the 贵人歌诀 gives the day stem a branch,
+## whichever of the two the 时辰's half of the day calls for (卯..申 昼, 酉..寅 夜),
+## and 月将加时 leaves the earth palace holding that branch this far round from 子.
+## So the 贵人 is drawn on the slot whose 天盘支 is its own branch, and that palace is
+## where `_gods` counts the twelve 天将 out from (reference `_calc_gui_ren`).
+static func _guide_home(day_gan: String, hour_branch: int, turn: int) -> int:
 	var daytime := hour_branch >= 3 and hour_branch <= 8
 	var guide := ZHI.find((GUIDE_DAY if daytime else GUIDE_NIGHT)[day_gan])
-	var home := posmod(guide - turn, 12)
-	var forward := home >= 9 or home <= 4
+	return posmod(guide - turn, 12)
 
+
+## 布天将: from the 贵人's own palace (`home`) the twelve ride round the plate - 顺行
+## from 亥子丑寅卯辰 and 逆行 from 巳午未申酉戌, the way the reference has it. They
+## come back as indexes into `GODS`/`GOD_NAMES`, one per 地盘子; `home`'s own is 0,
+## the 贵人.
+static func _gods(home: int) -> PackedInt32Array:
+	var forward := home >= 9 or home <= 4
 	var gods := PackedInt32Array()
 	gods.resize(12)
 	for b in 12:

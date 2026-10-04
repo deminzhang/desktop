@@ -79,10 +79,15 @@ const R_MOON := 115.0   ## inside the ticks
 ## dial. Its reach is the window's: the rim leaves 12 px either side and the four
 ## direction marks use 8 of them, so it is drawn between the rim and their tips. A
 ## view landing exactly on a cardinal hides the arc's middle behind that point's
-## own triangle; the rest of the arc still says which way the turn went. ARC_SPAN
-## is the mark's own width and not the field of view - the rig holds a *vertical*
-## fov and the card knows nothing of the wallpaper's shape, so the arc says where
-## the view is and not how much sky it holds.
+## own triangle; the rest of the arc still says which way the turn went.
+##
+## The arc's own width is the **frame's** (2026-10-12 第二十一轮: "弧做长点，跟实际3D
+## 场景中的视角一致，宽屏的弧就长点，窄屏就短点"): it spans the horizontal field of
+## view the 3D camera actually shows, worked out from the rig's vertical fov and the
+## wallpaper viewport's shape (`_view_arc_span`), so the arc is as long as the slice
+## of sky on screen is wide. It used to be a fixed 40 deg mark that said where the
+## view was and nothing about how much sky it held; ARC_SPAN is what is left of it -
+## the fallback for a rig with no camera (a probe), which has no frame to measure.
 const R_VIEW_ARC := R_DISC + 5.0
 const ARC_SPAN := 40.0
 const ARC_WIDTH := 3.0
@@ -94,6 +99,18 @@ const SOUTH_UP := 180.0
 ## where the point is, rather than the button being centred on the mark and hanging
 ## outside the window.
 const DIR_BUTTON := 24.0
+## A 左转/右转 chip's own box (2026-10-12 第二十一轮: 做方、收窄、下移). Square and the
+## same 24 px as a direction button - the arrow is the whole control, so it wants a
+## target rather than a box - and hung ROTATE_TOP down from the card's top edge
+## instead of the 8 px it started at, and ROTATE_INSET in from the window's side
+## instead of 12: the rim is 138 px round, so the card's top corners stay empty down
+## to about y 70, and a chip that sits *in* that corner (8 px off the rim at its inner
+## corner) reads as belonging to the card where one on the window's own margin does
+## not. Measured from the disc's centre, the inner corner is 146 px out: clear of the
+## rim by 8, and 12 px closer to it than the 12/16 corner the chips started in.
+const ROTATE_CHIP := 24.0
+const ROTATE_TOP := 30.0
+const ROTATE_INSET := 16.0
 ## How far past the rim a direction mark's centre stands: the mark is 8 px deep, so
 ## its base sits a px off the rim and its tip ends 9 px out - just inside the 12 px
 ## the window leaves, with the view arc's own band crossing the middle of it.
@@ -172,7 +189,11 @@ const C_STAR := Color(0.72, 0.84, 0.92, 0.86)
 const C_DOOR := Color(0.62, 0.80, 0.90, 0.86)
 const C_GOD := Color(0.82, 0.76, 0.98, 0.86)
 const C_ZHI := Color(0.98, 0.78, 0.52, 0.88)
-const C_DUTY := Color(1.00, 0.84, 0.45, 0.95)   ## 值符星 / 值使门 / 值符神, each on the palace it stands on
+const C_DUTY := Color(1.00, 0.84, 0.45, 0.95)   ## 金: 值符星 / 值使门 / 值符神, and the 大六壬 月将支
+## 大六壬's other mark, the 贵人's own red (用户 2026-10-12: 月将支标用金色，贵人用红色).
+## It is the card's red - the one the 北 triangle already writes with - rather than a
+## second red invented beside it.
+const C_GUIDE := Color(0.95, 0.38, 0.34, 0.95)
 ## 驿马: the one mark on the card that is a *place*, not a name - an orange-brass of
 ## its own, warm enough to read as a travelling mark and clear of the duty gold.
 const C_HORSE := Color(0.98, 0.62, 0.30, 0.95)
@@ -368,26 +389,30 @@ static func dial_offset_deg(bearing_deg: float) -> float:
 
 func _build_controls() -> void:
 	# 左转 / 右转 sit in the card's own **upper** corners (用户 2026-10-10 第十八轮:
-	# 移到罗盘左上/右上角), the two corners the rim leaves free at the top - the lower
-	# pair is the time bar's 时辰 chips. They carry arrows rather than words, and the
-	# arrows point the way the card turns under the view: ↙ U+2199 at the top left is
-	# 左转, ↘ U+2198 at the top right is 右转 (the ◀ U+25C0 family is not in the system
-	# font, ↙↘ are). One glyph in the box, so a size up.
+	# 移到罗盘左上/右上角), the two corners the rim leaves free - the card's lower two
+	# are the time bar's chips (时辰± on the right, 星座/星宿 on the left since
+	# 2026-10-12 第二十一轮). They carry arrows rather than words, and the arrows point
+	# the way the card turns under the view: ↙ U+2199 at the top left is 左转, ↘
+	# U+2198 at the top right is 右转 (the ◀ U+25C0 family is not in the system font,
+	# ↙↘ are). One glyph in the box, so a size up. The box is square and a little
+	# lower down the corner than it was (2026-10-12 第二十一轮: 窄一点、做成方的、向下移一移).
 	# The chips are added to the tree *before* their box is set: a Button is never
 	# smaller than its minimum size, and until it is in the tree that minimum is the
-	# default theme's (31 px tall, whatever the font), which would clamp a 60 x 24 chip
-	# to 60 x 31 and never let it shrink back (measured 2026-10-10 第十八轮).
+	# default theme's (31 px tall, whatever the font), which would clamp a 24 x 24 chip
+	# to 24 x 31 and never let it shrink back (measured 2026-10-10 第十八轮).
 	var left := _chip("↙", ARROW_SIZE)
 	left.pressed.connect(turn.bind(-1))
 	add_child(left)
-	left.position = Vector2(12.0, 8.0)
-	left.size = Vector2(60.0, 24.0)
+	left.position = Vector2(ROTATE_INSET, ROTATE_TOP)
+	left.size = Vector2(ROTATE_CHIP, ROTATE_CHIP)
 
 	var right := _chip("↘", ARROW_SIZE)
 	right.pressed.connect(turn.bind(1))
 	add_child(right)
-	right.position = Vector2(228.0, 8.0)
-	right.size = Vector2(60.0, 24.0)
+	# the card's own width rather than this Control's, which is only the same number
+	# once the sky has laid the card out at its full size
+	right.position = Vector2(CENTRE.x * 2.0 - ROTATE_INSET - ROTATE_CHIP, ROTATE_TOP)
+	right.size = Vector2(ROTATE_CHIP, ROTATE_CHIP)
 
 	# The four direction triangles, on the card's own four axes (2026-10-10 第十五轮):
 	# the 北/东/南/西 chip row that used to stand under the dial, moved onto the
@@ -579,13 +604,15 @@ func _draw_ticks() -> void:
 		draw_line(CENTRE + dir * inner, CENTRE + dir * R_TICK_OUT, colour, width, true)
 
 
-## One ring: its radial slot lines, then its marks. The items are `[bearing,
-## text]`, or `[bearing, text, colour]` where the entry is highlighted - except on
-## a `"trigram"` layer, where the second field is the 爻 mask and a bar glyph is
-## drawn in place of the text. (The 奇门's own names are not a ring any more: they
-## are drawn per 宫 by `_draw_palaces`.) A layer may ask for `"side_columns"`, which
-## writes the names on the card's two exact sides down the card as columns instead
-## of along the tangent - that is the 大六壬 ring's own choice.
+## One ring: its radial slot lines, then its marks. An item is `[bearing, text]`,
+## written in the layer's own `colour`, or `[bearing, text, ink]` where `ink` gives a
+## colour per character - the 大六壬 ring writes its 贵人 red and its 月将's 支 gold
+## without either being a whole label. On a `"trigram"` layer the second field is
+## instead the 爻 mask and a bar glyph is drawn in place of the text. (The 奇门's own
+## names are not a ring any more: they are drawn per 宫 by `_draw_palaces`.) A layer
+## may ask for `"side_columns"`, which writes the names on the card's two exact sides
+## down the card as columns instead of along the tangent - that is the 大六壬 ring's
+## own choice.
 func _draw_layer(layer: Dictionary, cell: float) -> void:
 	var radius := float(layer["radius"])
 	var trigram: bool = String(layer.get("shape", "")) == "trigram"
@@ -596,15 +623,16 @@ func _draw_layer(layer: Dictionary, cell: float) -> void:
 	for item: Array in layer["items"]:
 		var angle := deg_to_rad(dial_offset_deg(float(item[0])))
 		var dir := Vector2(sin(angle), -cos(angle))
+		var at := CENTRE + dir * radius
 		if trigram:
-			_trigram(CENTRE + dir * radius, angle, int(item[1]), layer["colour"])
+			_trigram(at, angle, int(item[1]), layer["colour"])
 		else:
-			var colour: Color = item[2] if item.size() > 2 else layer["colour"]
+			var ink: Array = item[2] if item.size() > 2 else []
 			if bool(layer.get("side_columns", false)) \
 					and is_side(dial_offset_deg(float(item[0]))):
-				_upright_column(CENTRE + dir * radius, String(item[1]), 13, colour)
+				_upright_column(at, String(item[1]), 13, layer["colour"], ink)
 			else:
-				_radial_label(CENTRE + dir * radius, angle, String(item[1]), 13, colour)
+				_radial_label(at, angle, String(item[1]), 13, layer["colour"], ink)
 
 
 ## 环一: the eight palaces' trigrams, as their own glyphs - the ring the 奇门 chart
@@ -693,7 +721,10 @@ func _palace_block(index: int) -> Array:
 ## the twelve 地盘支, the sky's own 地支 running 子 from north. Each slot's name is
 ## 神 + 遁干 + 支, written along the dial like every other ring name - except the two
 ## on the card's exact sides, which stand upright as a column instead
-## (`side_columns`, 用户 2026-10-10 第十七轮).
+## (`side_columns`, 用户 2026-10-10 第十七轮). The two marks the plate is read for take
+## their own ink (`_slot_ink`): the 贵人's 神 red, the 月将's 支 gold - and which slot
+## is which is the chart's own answer (`LiuRen.pan`'s `guide` / `general`), the ring
+## working out nothing for itself (用户 2026-10-12: 月将支标用金色，贵人用红色).
 func _liuren_layer() -> Dictionary:
 	var items: Array = []
 	for i in Branches.NAMES.size():
@@ -702,8 +733,25 @@ func _liuren_layer() -> Dictionary:
 			continue
 		var text := "%s%s%s" % [slot.get("god", ""), slot.get("stem", ""),
 				slot.get("branch", "")]
-		items.append([Branches.bearing(i), text])
+		items.append([Branches.bearing(i), text, _slot_ink(slot)])
 	return {"radius": R_LIUREN, "colour": C_ZHI, "items": items, "side_columns": true}
+
+
+## One 大六壬 slot's label ink, character by character: 神 (the 贵人's own red on the
+## slot it rides), 遁干 (the ring's own warm amber), 天盘支 (the card's 金 on the slot
+## the 月将 was laid on). The three fields are one character each - 遁干 is a 干 or the
+## 空亡's 〇 - so the ink lines up with the label `_liuren_layer` writes.
+func _slot_ink(slot: Dictionary) -> Array:
+	var fields := [[str(slot.get("god", "")),
+				C_GUIDE if bool(slot.get("guide", false)) else C_ZHI],
+			[str(slot.get("stem", "")), C_ZHI],
+			[str(slot.get("branch", "")),
+				C_DUTY if bool(slot.get("general", false)) else C_ZHI]]
+	var ink: Array = []
+	for field: Array in fields:
+		for i in String(field[0]).length():
+			ink.append(field[1])
+	return ink
 
 
 ## The name a line or ring draws: the chart's own is the full one (天蓬, 休门), and a
@@ -790,9 +838,39 @@ func _draw_view_arc() -> void:
 	# draw_arc measures from +x towards +y (screen down), this card's dial angle
 	# from the top towards the east, so the two differ by a quarter turn
 	var middle := deg_to_rad(dial_offset_deg(rig.azimuth)) - PI * 0.5
-	var half := deg_to_rad(ARC_SPAN * 0.5)
-	draw_arc(CENTRE, R_VIEW_ARC, middle - half, middle + half, 32, C_INDEX, ARC_WIDTH,
+	var half := deg_to_rad(_view_arc_span() * 0.5)
+	draw_arc(CENTRE, R_VIEW_ARC, middle - half, middle + half, 64, C_INDEX, ARC_WIDTH,
 			true)
+
+
+## How long the arc is: the horizontal field of view the wallpaper is actually
+## showing, in degrees of bearing. The rig holds a **vertical** fov (its `_apply`
+## writes `Camera3D.fov`, and the camera keeps its height), so the frame is as wide
+## as the aspect makes it: `2 atan(tan(fov/2) * aspect)`. A 16:9 wallpaper at the
+## opening fov of 100 therefore shows about 129 deg across - and that is what the
+## arc is drawn as, so the card says "this much of the sky is on screen" as well as
+## "on this bearing" (用户 2026-10-12 第二十一轮: 宽屏的弧就长点，窄屏就短点).
+##
+## It is a *bearing* span: the card is drawn in bearings, and the frame's own
+## horizontal field is only the same thing along the horizon. Close enough for a
+## wallpaper whose frame is under its own horizon, and the alternative - projecting
+## two frame edges through the camera - would swing the arc's ends about with the
+## altitude, which is not what the mark is read for.
+func _view_arc_span() -> float:
+	var camera := rig.camera
+	if camera == null or not is_instance_valid(camera):
+		return ARC_SPAN
+	var rect := camera.get_viewport().get_visible_rect().size
+	if rect.y <= 0.0:
+		return ARC_SPAN
+	return frame_span(rig.fov, rect.x / rect.y)
+
+
+## The horizontal field of view of a frame `aspect` wide holding a vertical field of
+## `fov_deg`: the arc's own length, as a static so it can be read (and checked)
+## without a camera, a window or a rig.
+static func frame_span(fov_deg: float, aspect: float) -> float:
+	return rad_to_deg(2.0 * atan(tan(deg_to_rad(fov_deg * 0.5)) * maxf(aspect, 0.0)))
 
 
 ## The 太极 in the middle of the card, where the bearing readout used to be: two
@@ -850,15 +928,44 @@ static func is_side(dial_deg: float) -> bool:
 ## tangential label carries and in the same order - the ring's own name is only ever
 ## 神 + 遁干 + 天盘支 (三字, see `_liuren_layer`) - and the column stands in the same
 ## 13 x 39 px box the tangential label does at those two slots, so nothing else on
-## the card moves.
-func _upright_column(at: Vector2, text: String, size: int, colour: Color) -> void:
+## the card moves. `ink` is the same per-character colour list the tangential label
+## takes, so a column writes its 贵人 and its 月将支 in the same two inks the rest of
+## the ring does.
+func _upright_column(at: Vector2, text: String, size: int, colour: Color,
+		ink: Array = []) -> void:
 	# a CJK glyph advances one em, which is the pitch the tangential label lays its
 	# characters out at too - the column ends up exactly as long as the row was
-	var pitch := _font.get_string_size("〇", HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	var pitch := _em(size)
 	var top := at.y - pitch * float(text.length() - 1) * 0.5
 	for i in text.length():
 		_upright_label(Vector2(at.x, top + pitch * float(i)), text.substr(i, 1), size,
-				colour)
+				ink[i] if i < ink.size() else colour)
+
+
+## One pass of a label's characters, laid out from `at` towards the east: a single
+## `draw_string` while the whole label is written in one ink, and one per character
+## otherwise, each in `ink`'s own colour (a slot's 神, 遁干 and 支 can be three
+## different inks). `at` is the top-left of the run's box, the same corner
+## `draw_string` is handed, and the characters are pitched at one em - the advance a
+## CJK glyph takes - so the coloured pass lands in the box the single one does.
+func _draw_run(at: Vector2, text: String, size: int, colour: Color,
+		ink: Array) -> void:
+	if ink.is_empty():
+		draw_string(_font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, size, colour)
+		return
+	var pitch := _em(size)
+	var x := at.x
+	for i in text.length():
+		var ink_colour: Color = ink[i] if i < ink.size() else colour
+		draw_string(_font, Vector2(x, at.y), text.substr(i, 1),
+				HORIZONTAL_ALIGNMENT_LEFT, -1.0, size, ink_colour)
+		x += pitch
+
+
+## One em of the label font at `size`: what a CJK glyph advances, and so the pitch
+## every label written character by character is laid out at.
+func _em(size: int) -> float:
+	return _font.get_string_size("〇", HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
 
 
 ## One label on the card, its top pointing radially outwards so a name stands the
@@ -871,16 +978,16 @@ func _upright_column(at: Vector2, text: String, size: int, colour: Color) -> voi
 ## The turn is 180 deg, and a label that follows the dial's tangent is the same box
 ## whichever way round it is written, so nothing moves: same box, same reach, same
 ## clearance from the 奇门 blocks, the tick ring and the 驿马's own ring. Only the ink
-## changes hands.
+## changes hands - `ink`, when the label's characters are not all one colour, is
+## handed on to `_draw_run` and the box stays the one this measures.
 func _radial_label(at: Vector2, angle: float, text: String, size: int,
-		colour: Color) -> void:
+		colour: Color, ink: Array = []) -> void:
 	var turn := angle
 	if angle > PI * 0.5 and angle < PI * 1.5:
 		turn += PI
 	var extent := _font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size)
 	draw_set_transform(at, turn, Vector2.ONE)
-	draw_string(_font, Vector2(-extent.x * 0.5, extent.y * 0.34), text,
-			HORIZONTAL_ALIGNMENT_LEFT, -1.0, size, colour)
+	_draw_run(Vector2(-extent.x * 0.5, extent.y * 0.34), text, size, colour, ink)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 

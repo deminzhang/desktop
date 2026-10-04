@@ -12,10 +12,6 @@ signal host_event(name: String)
 
 const WALLPAPER_TITLE := "XuanDesk.Aquarium"
 const HUD_TITLE := "XuanDesk.HUD"
-## The menu window's own title. It must not *start* with HUD_TITLE: the host matches
-## overlays by title prefix, and two windows under one prefix would fight over the
-## same role (计划 §2.3 G30).
-const MENU_TITLE := "XuanDesk.Menu"
 const MAX_RESPAWNS := 3
 
 var online := false
@@ -59,9 +55,10 @@ func stop() -> void:
 
 
 ## One line to the host, on the same socket its metrics come back on. The host
-## reads "quit" and "wall 0|1" (native/host.c); anything else it ignores, so a
-## command that arrives before the host is up is simply lost - which is why
-## nothing that matters is sent that way.
+## reads "quit", "wall 0|1", "screen n" and the "menu ..." model lines
+## (native/host.c handle_command); anything else it ignores, so a command that
+## arrives before the host is up is simply lost - which is why the tray model is
+## re-sent the moment the link comes up (shell/main.gd _on_host_online).
 func send_command(line: String) -> bool:
 	if _peer == null:
 		return false
@@ -83,7 +80,6 @@ func _spawn() -> void:
 		"--pid", str(OS.get_process_id()),
 		"--title", WALLPAPER_TITLE,
 		"--overlay-title", HUD_TITLE,
-		"--menu-title", MENU_TITLE,
 		"--wallpaper", "1" if _opts.get("wallpaper", true) else "0",
 		"--no-activate", "1" if _opts.get("no_activate", true) else "0",
 		"--interval", str(int(_opts.get("interval", 1000))),

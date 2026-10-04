@@ -8,9 +8,11 @@ const PANEL := Vector2(280.0, 280.0)
 const ROW_X := 14.0
 ## The value column's right edge, 14 px inside the card.
 const ROW_RIGHT := 266.0
-## The table starts below the 菜单 button the shell glues to this card's top-right
-## corner - `HudWindow.MENU_TOP + HudMenu.BUTTON.y` = 24 - because 处理器's value is
-## the top row of the right-aligned value column and used to be drawn under it.
+## The table's top margin. It is 28 rather than ROW_X's 14 because the shell's 菜单
+## button used to hang over this card's top-right corner (the 处理器 value is the top
+## row of the right-aligned value column and was drawn under it). The button went to
+## the notification area 2026-10-13, and the table keeps the margin it was laid out
+## with - moving it up would re-cut every row below for no reason.
 const ROW_TOP := 28.0
 const ROW_PITCH := 27.0
 const GRAPH := Rect2(14.0, 212.0, 252.0, 54.0)

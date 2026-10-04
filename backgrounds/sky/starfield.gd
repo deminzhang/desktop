@@ -14,7 +14,8 @@ const RADIUS := 480.0
 ## Magnitude range the ramps are stretched over.
 const MAG_BRIGHT := -1.5
 const MAG_LIMIT := 6.5
-## Quad size in world units at RADIUS (~2.6 px per unit at 2560x1440, 60° fov).
+## Quad size in world units at RADIUS (~2.9 px per unit at the middle of a
+## 2560x1440 frame at the sky's own 60 deg field, SkyProjection).
 const SIZE_MIN := 0.8
 const SIZE_MAX := 2.8
 const SEED := 20240929

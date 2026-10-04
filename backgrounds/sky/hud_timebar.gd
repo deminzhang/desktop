@@ -26,38 +26,55 @@
 ##
 ## The first line comes from the pillars the sky hands over with `set_pillars()`;
 ## the second one's 局 comes over with it in `set_ju()`.
+##
+## The card's two lower corners are this strip's too - they hang up into the card's
+## own rectangle, which is why those chips' y is negative. Each corner is a **column of
+## three rows** since 2026-10-12 第二十一轮: 星座 / 星宿 (the sky's own line switches) over
+## the shell's 桌面 switch on the left, and 时辰− / 时辰+ / 现在 on the right. The sky's
+## two switches belong to the sky - the chip says one was thrown (`switch_toggled`) and
+## the sky hands the resulting state back with `set_switch()` - and the third left row
+## is a seat the *shell* fills with a chip of its own (`shell_switch_slot`), so the card
+## carries a switch it knows nothing about.
 class_name SkyTimeBar
 extends Control
 
 const SHICHEN_SECONDS := 7200.0
 
 ## Where the readout lines sit inside the strip: the two readout lines only (they
-## are what the dial is read as), and the strip is just their height - the button
-## row that used to live under them is gone: 时辰−/时辰+ moved into the card's two
-## lower corners and 现在 into the clock's own row (用户 2026-10-10 第十八轮: 时辰加减
-## 移到罗盘左下右下角、缩小 HUD 整体高度). The bar starts right under the card's own
-## rectangle (SkyBackground.HUD_COMPASS_HEIGHT), so the lines hug the card and
-## nothing is left empty above them.
+## are what the dial is read as), and the strip is just their height. The bar starts
+## right under the card's own rectangle (SkyBackground.HUD_COMPASS_HEIGHT), so the
+## lines hug the card and nothing is left empty above them.
 const CLOCK_BASELINE := 12.0
 const PILLAR_BASELINE := 29.0
-## The two 时辰 chips: the card's own lower corners, in this strip's coordinates -
-## which begin one card below, so they are negative here. The card's upper corners
-## are the compass's own 左转/右转 (see SkyCompassHud).
-const CORNER_LEFT := Vector2(12.0, -32.0)
-const CORNER_RIGHT := Vector2(228.0, -32.0)
-const CORNER_SIZE := Vector2(60.0, 24.0)
-## 现在, at the end of the 四柱/局 line: with the strip only as tall as its two readout
-## lines there is no row left for it, so it parks in whichever of them leaves a lane
-## free. That used to be the first line - the 农历 date was short and the 排盘 line
-## under it ran to x 239. 2026-10-10 第二十轮 the two lines traded places: the first
-## one now carries the 三元九运 as well and runs to **x 248** at its worst (a 闰月 +
-## 冬月/腊月 + 廿九 date: `九紫离火 道历四七二三年闰冬月廿九` = 196 px), while the
-## second is a fixed 180 px (all its fields are two or three characters wide), so it
-## is the second line that leaves the lane, and 现在 hangs there - at the row of that
-## line, which is also where its own text sits. Placed by hand, so it gets exactly
-## this box (see `_chip`).
-const NOW_AT := Vector2(244.0, 14.0)
-const NOW_SIZE := Vector2(44.0, 22.0)
+## The card's two lower corners are **two columns of three rows each** (用户 2026-10-12
+## 第二十一轮: "星座与星宿按扭用开关样式,两个上下排列" / "菜单里的桌面显隐开关也转出来,放在星座
+## 星宿开关下,上中下三个排一起,时辰−,时辰+,现在也是上中下排一起,对齐行间距一致贴上"):
+##
+##   左列 星座 · 星宿 · 桌面(座)        右列 时辰− · 时辰+ · 现在
+##
+## All six are 38 x 24 and the three rows of a column **touch** — one pitch, one size,
+## so the two columns read as one strip under the card. The coordinates are in this
+## strip's frame, which begins one card below (y 300), hence the negative y; the rows
+## are the window's y 248…272 / 272…296 / 296…320, i.e. the last one hangs 20 px into
+## the strip, over the readout lines' own rows but clear of their text: the first line
+## runs to x 248 at its very worst (a 闰月 date) and the second to 240, while the
+## columns stand at x 12…50 and 250…288.
+##
+## 38 rather than 40 is that worst case: the widest line and a column's edge are then 2
+## px apart instead of touching.
+const ROW_SIZE := Vector2(38.0, 24.0)
+const ROW_LEFT := 12.0
+const ROW_RIGHT := 250.0    ## the card's own width (300) less the 12 px it leaves
+const ROW_TOP := -52.0
+const ROW_MIDDLE := -28.0
+const ROW_BOTTOM := -4.0
+## 现在 is the right column's **third row** (2026-10-12 第二十一轮: 现在也跟 时辰± 上中下排
+## 一起), so it has no constants of its own any more: it is a ROW_SIZE chip at
+## (ROW_RIGHT, ROW_BOTTOM), and the lane reasoning it used to need - the strip being
+## only as tall as its two readout lines, and the first line's 196 px worst case - is
+## what puts the columns at 38 px wide and 12 px in from either side (see above).
+## It hangs over the readout rows but not over their text: the second line ends at
+## x 240 and this column starts at 250.
 
 const C_TEXT := Color(0.88, 0.96, 0.99)
 const C_DIM := Color(0.44, 0.63, 0.70)
@@ -66,10 +83,33 @@ const C_FILL := Color(0.09, 0.21, 0.26, 0.80)
 const C_FILL_HOVER := Color(0.14, 0.31, 0.38, 0.90)
 const C_BORDER := Color(0.30, 0.72, 0.82, 0.32)
 const C_BORDER_HOVER := Color(0.40, 0.85, 0.95, 0.55)
+## The look a layer switch wears while it is on: the accent it also writes its name
+## in, over a fill a shade brighter than the hover - a switch has to say which way it
+## is thrown from across the desk, and the accent is what the card says "live" with.
+const C_FILL_ON := Color(0.16, 0.40, 0.48, 0.92)
+const C_ON_BORDER := Color(0.40, 0.85, 0.95, 0.85)
+
+## One of the card's two layer switches has been thrown: `id` is the sky's own
+## switch id ("figures" / "mansions", the pair `Background` used to hand the 菜单)
+## and `on` the state it was thrown to. The state is the sky's, not the chip's: what
+## the chip shows is what the sky tells it with `set_switch`, so a switch the sky
+## itself changed again (a rebuild, a command line) cannot leave the chip lying about
+## it.
+signal switch_toggled(id: String, on: bool)
 
 var clock: TimeCore
 
 var _font: Font
+## The empty seat the shell's own switch goes in: the left column's third row, sized and
+## placed by this bar, filled by the shell (see `_build_controls` and
+## `shell_switch_slot`). Null until `_ready` has built the chips.
+var _shell_slot: Control
+## The two layer switches, by the sky's own switch id: {"figures": the 星座 chip,
+## "mansions": the 星宿 chip}, each a SwitchChip. Built with the rest of the chips in
+## `_ready`, shown the state the sky hands over with `set_switch`.
+var _switches := {}
+## That state as it arrives, id -> bool, kept before the chips exist (`set_switch`).
+var _switch_state := {}
 var _pillars: Dictionary = {}
 ## The 奇门 chart's 三元 (1..3) and 局数, handed over by the sky beside the pillars
 ## (`SkyBackground._chart`): 0 until a chart has been cast, which is also when the
@@ -124,40 +164,105 @@ func _refresh() -> void:
 # ------------------------------------------------------------------- controls
 
 func _build_controls() -> void:
-	# 时辰− and 时辰+ stand in the card's own lower corners (用户 2026-10-10 第十八轮),
-	# the two corners the rim leaves free and the card's own 左转/右转 do not use - they
-	# are placed in *this* strip's frame, which begins one card below, so their y is
-	# negative. 现在 sits at the end of the readout line that leaves a lane free rather
-	# than in a row of its own, which is what let the strip drop to the height of its
-	# two readout lines (which line that is, see NOW_AT).
-	# Each chip is added to the tree *before* its box is set: a Button is never
-	# smaller than its minimum size, and until it is in the tree that minimum is the
-	# default theme's - which would clamp these to 31 px tall and never let them back
-	# (measured 2026-10-10 第十八轮, see SkyCompassHud._box for the other half of it).
+	# 时辰− / 时辰+ / 现在: the right column, top to bottom.
 	var steps := [
-		{"text": "时辰−", "at": CORNER_LEFT, "action": _step.bind(-1)},
-		{"text": "时辰+", "at": CORNER_RIGHT, "action": _step.bind(1)},
+		{"text": "时辰−", "at": Vector2(ROW_RIGHT, ROW_TOP), "action": _step.bind(-1)},
+		{"text": "时辰+", "at": Vector2(ROW_RIGHT, ROW_MIDDLE), "action": _step.bind(1)},
 	]
 	for spec: Dictionary in steps:
-		var step := _chip(String(spec["text"]))
+		var step := _chip(String(spec["text"]), 12)
 		step.pressed.connect(spec["action"])
 		add_child(step)
 		step.position = spec["at"]
-		step.size = CORNER_SIZE
+		step.size = ROW_SIZE
 
-	var now := _chip("现在")
+	# 星座 / 星宿: the two layers of the sky's line work, as switches on the card, in
+	# the left column's first two rows. They are the sky's own pair (the ids are what
+	# SkyBackground.set_layer_switch takes), so the bar only says one was thrown - the
+	# sky turns the layer and hands the state back through set_switch().
+	var toggles := [
+		{"id": "figures", "text": "星座", "at": Vector2(ROW_LEFT, ROW_TOP)},
+		{"id": "mansions", "text": "星宿", "at": Vector2(ROW_LEFT, ROW_MIDDLE)},
+	]
+	for spec: Dictionary in toggles:
+		var chip := SwitchChip.new()
+		chip.setup(_font, String(spec["text"]))
+		var id := String(spec["id"])
+		# the id is *bound*, not closed over: a lambda over the loop's own variable
+		# handed every chip the first one's id (measured 2026-10-12: both switches
+		# reported 'figures'), and the two are told apart by nothing else
+		chip.toggled.connect(_thrown.bind(id))
+		add_child(chip)
+		chip.position = spec["at"]
+		chip.size = ROW_SIZE
+		# the sky's own state, which it may have handed over before this bar was in
+		# the tree (see set_switch); a layer nobody said anything about is on, which
+		# is the sky's own default
+		chip.show_state(bool(_switch_state.get(id, true)))
+		_switches[id] = chip
+
+	# the left column's third row is the **shell's seat** (2026-10-12 第二十一轮): the
+	# shell puts its own 桌面 switch here (Background.hud_shell_slot), so that switch
+	# stands with the card's own two instead of in the menu - and the card does not
+	# know what it is.
+	# The seat itself is inert (MOUSE_FILTER_IGNORE): a child of an IGNORE control still
+	# takes its own presses (measured with .tmp/tests/_seat_probe.gd: IGNORE, PASS and STOP
+	# all let the chip's press through), so nothing is paid for leaving an unfilled seat
+	# out of the hit test - it cannot swallow a drag on the HUD.
+	_shell_slot = Control.new()
+	_shell_slot.name = "ShellSwitch"
+	_shell_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_shell_slot)
+	_shell_slot.position = Vector2(ROW_LEFT, ROW_BOTTOM)
+	_shell_slot.size = ROW_SIZE
+
+	var now := _chip("现在", 12)
 	now.pressed.connect(_now)
 	add_child(now)
-	now.position = NOW_AT
-	now.size = NOW_SIZE
+	now.position = Vector2(ROW_RIGHT, ROW_BOTTOM)
+	now.size = ROW_SIZE
 
 
-func _chip(text: String) -> Button:
+## The seat the shell's own switch goes in - the left column's third row, under 星座 and
+## 星宿 (用户 2026-10-12 第二十一轮: 菜单里的 桌面 显隐开关也搬到这里,上中下三个排一起). The
+## seat is this card's because the column is: its size, its position and the look around
+## it are the sky's, while the chip in it belongs to the shell (`Background.hud_shell_slot`
+## hands this Control up). Null until `_ready` has run, which is after `build_hud()`
+## returns but before the shell asks for it.
+func shell_switch_slot() -> Control:
+	return _shell_slot
+
+
+## One layer switch, thrown by the user: `state` is the chip's own new state and `id`
+## the sky's switch it stands for, bound to the chip as it is built. The pair is
+## handed on as the bar's own signal - the sky is the one that owns what a layer is.
+func _thrown(state: bool, id: String) -> void:
+	switch_toggled.emit(id, state)
+
+
+## What the sky's own switches are set to, drawn on the chips: `id` is
+## `switch_toggled`'s own, and an id this bar does not carry is ignored (the sky
+## decides what it offers, the bar what it draws). Set without emitting - the sky is
+## telling the chip what it already did, not asking it for anything.
+##
+## The state is kept whether or not the chip is up yet: the sky hands it over from
+## `build_hud()`, and the HUD is not in the tree at that point - its chips are built
+## in `_ready`, which runs when the shell puts the content in its window, so a state
+## that were only applied to a live chip would be dropped on the floor and every
+## switch would come up off.
+func set_switch(id: String, on: bool) -> void:
+	_switch_state[id] = on
+	var chip: SwitchChip = _switches.get(id)
+	if chip != null:
+		chip.show_state(on)
+
+
+func _chip(text: String, font_size := 13) -> Button:
 	var button := Button.new()
 	button.text = text
 	button.focus_mode = Control.FOCUS_NONE
 	button.add_theme_font_override("font", _font)
-	button.add_theme_font_size_override("font_size", 13)
+	button.add_theme_font_size_override("font_size", font_size)
 	button.add_theme_color_override("font_color", C_DIM)
 	button.add_theme_color_override("font_hover_color", C_TEXT)
 	button.add_theme_color_override("font_pressed_color", C_ACCENT)
@@ -178,8 +283,6 @@ func _chip(text: String) -> Button:
 	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	return button
 
-
-# ------------------------------------------------------------------- stepping
 
 ## One press: the instant is sent a 时辰 - `direction` +1 is forward in time. The
 ## clock glides there rather than cutting (TimeCore.move_by), so the sky is seen to

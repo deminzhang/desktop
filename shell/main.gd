@@ -7,7 +7,13 @@
 ##
 ## It also owns the one switch that is about the desktop layer itself rather than
 ## about what is drawn in it: show/hide the 3D desktop (`_toggle_desktop`), which
-## the HUD's 桌面 button and the host's Ctrl+Alt+H both ask for.
+## the tray's 桌面 row and the host's Ctrl+Alt+H both ask for.
+##
+## The 菜单 is the host's notification-area icon since 2026-10-13 (native/host.c's
+## tray block): Windows draws that popup, so this side's part is the *model* - which
+## background is live, which monitors there are, whether 穿透 is locked - pushed as
+## `menu ...` lines whenever one of those changes (_push_tray_model), and the rows
+## come back as host events ("menu background sky", "menu screen 1").
 ##
 ## Dev switches: see shell/args.gd.
 extends Node
@@ -16,11 +22,20 @@ const FADE_SEC := 0.12  ## per half of a background switch
 
 var opts: Args
 var hud_window: HudWindow
-var menu_window: HudMenu
 var metrics: MetricsClient
 
 var _background: Background
 var _current := ""
+## The shell's own 桌面 switch, when the live background's HUD has a seat for it
+## (`Background.hud_shell_slot`): built and owned by the shell, drawn in the card's own
+## column (2026-10-12 第二十一轮). Null for a background that leaves the switch to the
+## tray - and then the tray keeps its 桌面 row for it.
+var _desk_chip: SwitchChip
+## Whether the tray offers the 桌面 row: only for a background with no seat of its
+## own for that switch, and only while this process is wearing the desktop layer
+## (`--wallpaper=0` makes the switch a no-op, so the row goes with it).
+var _desk_row := true
+var _wallpaper := true
 var _grade: ColorRect
 var _vignette: ShaderMaterial
 var _fade: ColorRect
@@ -34,7 +49,7 @@ var _policy := Background.Policy.CONTINUOUS
 ## told otherwise.
 var _desktop_shown := true
 ## Which monitor the wallpaper window is on (2026-10-10): an index into the host's
-## own list (0 = the primary), which the HUD menu shows as 主屏/副屏 N. Like
+## own list (0 = the primary), which the tray shows as 主屏/副屏 N. Like
 ## _desktop_shown this is the client's state and the host is told about it - the
 ## list itself, and the geometry, are the host's.
 var _desktop_screen := 0
@@ -57,41 +72,25 @@ func _ready() -> void:
 		hud_window.name = "HudWindow"
 		add_child(hud_window)
 		hud_window.quit_requested.connect(_quit)
+		# 穿透 is this window's flag and the tray is the shell's: keep the row's tick
+		# in step with whatever turned it over - the tray itself, or Ctrl+Alt+T
+		hud_window.passthrough_changed.connect(_on_passthrough_changed)
 		hud_window.attach(metrics)
-
-		# The menu is a window of the shell's own, not a child of the HUD window: a
-		# Window nested inside another Window draws its first frame and then never
-		# draws again - a panel opened under the pointer would never appear (计划 §2.3
-		# G30). The HUD only glues it to its corner and reads 穿透 off it.
-		menu_window = HudMenu.new()
-		menu_window.name = "Menu"
-		add_child(menu_window)
-		menu_window.background_selected.connect(_on_background_selected)
-		menu_window.desktop_toggle_requested.connect(_toggle_desktop)
-		menu_window.quit_requested.connect(_quit)
-		menu_window.passthrough_toggled.connect(hud_window.toggle_passthrough)
-		menu_window.switch_toggled.connect(_on_menu_switch)
-		menu_window.screen_selected.connect(_on_screen_selected)
-		hud_window.set_menu(menu_window)
 	metrics.host_event.connect(_on_host_event)
 	metrics.online_changed.connect(_on_host_online)
 	metrics.frame_received.connect(_on_frame)
 
-	# the dev switch (计划 §8: --desktop-screen=<n>): the same request the 菜单's
+	# the dev switch (计划 §8: --desktop-screen=<n>): the same request the tray's
 	# 显示器 row sends, so a run can be put on the second monitor without a click
 	_desktop_screen = int(opts.num("desktop_screen", 0.0))
-
+	_wallpaper = opts.flag("wallpaper", not _shot)
 	metrics.start({
-		"wallpaper": opts.flag("wallpaper", not _shot),
+		"wallpaper": _wallpaper,
 		"no_activate": opts.flag("no_activate", true),
 		"interval": int(opts.num("interval", 1000.0)),
 	})
 
 	_switch(opts.text("background", Backgrounds.default_id()), false)
-
-	# the menu is opened by a click in real use; this is for photographs of it
-	if opts.flag("menu", false) and menu_window != null:
-		menu_window.open_panel()
 
 	if opts.has("exit_after"):
 		_timed_quit(opts.num("exit_after", 0.0))
@@ -103,8 +102,8 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		# A wallpaper is not a document: stray WM_CLOSE (shell housekeeping, a
 		# second host instance) must not take it down. Quit is explicit only -
-		# the HUD quit button, Ctrl+Alt+Q, or --exit-after.
-		print("XuanDesk: ignoring close request (use Ctrl+Alt+Q or the HUD quit button)")
+		# the tray's 退出 row, Ctrl+Alt+Q, or --exit-after.
+		print("XuanDesk: ignoring close request (use Ctrl+Alt+Q or the tray's 退出 row)")
 	elif what == NOTIFICATION_PREDELETE:
 		if metrics != null:
 			metrics.stop()
@@ -116,15 +115,41 @@ func _on_background_selected(id: String) -> void:
 	_switch(id)
 
 
-## One of the live background's own 菜单 switches (Background.menu_switches). The
-## shell holds none of that state - the switch belongs to the background, and the
-## menu is only where its row is.
-func _on_menu_switch(id: String, on: bool) -> void:
-	if _background != null:
-		_background.set_menu_switch(id, on)
+## The shell's own 桌面 switch, in whatever seat the background's HUD reserved for it
+## (2026-10-12 第二十一轮: 用户把菜单里的 桌面 显隐开关搬到罗盘左下角,与 星座/星宿 排成一列).
+## The chip is the shell's - SwitchChip is a shared widget, so it looks like the card's
+## own switches - and so is its state; the background only says where it stands. A
+## background with no seat leaves the row to the tray, so the switch is never in two
+## places and never in none.
+func _place_desktop_chip(bg: Background) -> void:
+	if _desk_chip != null:
+		_desk_chip.get_parent().remove_child(_desk_chip)
+		_desk_chip.queue_free()
+		_desk_chip = null
+	var slot := bg.hud_shell_slot()
+	if slot == null:
+		_desk_row = _wallpaper
+		_push_tray_model()
+		return
+	var chip := SwitchChip.new()
+	chip.setup(Fonts.ui_font(), "桌面")
+	chip.show_state(_desktop_shown)
+	chip.toggled.connect(_on_desktop_chip)
+	slot.add_child(chip)
+	chip.position = Vector2.ZERO
+	chip.size = slot.size
+	_desk_chip = chip
+	_desk_row = false
+	_push_tray_model()
 
 
-## The 菜单's 显示器 row (2026-10-10): the host moves the wallpaper window to the
+## The card's own 桌面 switch: the chip has already turned itself over, so this is the
+## same request the tray's row and Ctrl+Alt+H make.
+func _on_desktop_chip(_on: bool) -> void:
+	_toggle_desktop()
+
+
+## The tray's 显示器 row (2026-10-10): the host moves the wallpaper window to the
 ## monitor with this index and resizes it to that monitor, so the 3D desktop fills
 ## that screen and the primary goes back to the system's own wallpaper.
 ##
@@ -140,20 +165,68 @@ func _on_screen_selected(index: int) -> void:
 	print("XuanDesk: 3D desktop on screen %d" % index)
 
 
-## Every metric frame carries the host's monitor list; the menu is the only thing
-## that shows it, and it rebuilds its rows only when the list changed. The index it
-## marks is the host's own - the host is where the window is, so if it clamped a
-## request (a monitor went away between the click and the frame) the menu says so
-## rather than repeating what was asked for.
+## The shell's own 穿透 bookkeeping: the HUD window has turned itself over, and the
+## tray's row has to say the same thing.
+func _on_passthrough_changed(_locked: bool) -> void:
+	_push_tray_model()
+
+
+## Every metric frame carries the host's monitor list; the tray is the only thing that
+## shows it, and the model goes out only when the list changed. The index it marks is
+## the host's own - the host is where the window is, so if it clamped a request (a
+## monitor went away between the click and the frame) the tray says so rather than
+## repeating what was asked for.
 func _on_frame(_data: Dictionary) -> void:
-	if menu_window == null:
-		return
 	var list := metrics.screens()
 	var key := "%s|%d" % [JSON.stringify(list), metrics.screen()]
 	if key == _screens_seen:
 		return
 	_screens_seen = key
-	menu_window.set_screens(list, metrics.screen())
+	_push_tray_model()
+
+
+# ------------------------------------------------------------------- the tray
+
+## The tray's model, pushed whole whenever anything in it changes (2026-10-13). The
+## tray is drawn natively by bin/host.exe, so what crosses the wire is text: the rows
+## it should offer, their labels and which ones are ticked.
+##
+## Everything goes each time - `menu reset` and then every row - so there is no diff
+## to get wrong; it is a few hundred bytes on loopback, and the host keeps the last
+## model it was handed.
+##
+## The shape is the same one the old 菜单 panel had (one switch, one place): the
+## 换桌面 rows are the registry's order with the live one ticked, 显示器 is drawn only
+## when there is a choice of monitor, and 桌面 only when the live background has no
+## seat of its own for that switch and the desktop layer is on at all.
+func _push_tray_model() -> void:
+	metrics.send_command("menu reset")
+	var ids := Backgrounds.ids()
+	for index in ids.size():
+		var id := String(ids[index])
+		metrics.send_command("menu bg %d %d %s %s" % [index,
+				1 if id == _current else 0, id, Backgrounds.display_name(id)])
+	var screens := metrics.screens()
+	for index in screens.size():
+		metrics.send_command("menu screen %d %d %s" % [index,
+				1 if index == metrics.screen() else 0,
+				_screen_label(index, screens[index])])
+	metrics.send_command("menu desk %d" % (1 if _desk_row else 0))
+	metrics.send_command("menu locked %d" % (1 if _locked_now() else 0))
+
+
+## 主屏 / 副屏 N and the resolution: enough to tell two identical monitors apart is
+## the geometry the host reported, which is what "at 2560,0" says. Moved here with
+## the tray (it was HudMenu._screen_label).
+static func _screen_label(index: int, entry: Dictionary) -> String:
+	var place := "主屏" if bool(entry.get("primary", false)) else "副屏 %d" % index
+	return "%s %d×%d" % [place, int(entry.get("w", 0)), int(entry.get("h", 0))]
+
+
+## 穿透 is the HUD window's flag - the flag the tray's row has to show. A run without
+## a HUD (--hud=0) has no window to pass anything through, so it reads as off.
+func _locked_now() -> bool:
+	return hud_window != null and hud_window.is_locked()
 
 
 # ------------------------------------------------------------- the 3D desktop
@@ -168,20 +241,31 @@ func _toggle_desktop() -> void:
 	metrics.send_command("wall %d" % (1 if _desktop_shown else 0))
 	if _desktop_shown and _background != null:
 		_background.request_redraw()
+	# the card's own chip, when the live background's HUD draws one: Ctrl+Alt+H comes
+	# in here too, and the chip has to say what actually happened
+	if _desk_chip != null:
+		_desk_chip.show_state(_desktop_shown)
 	print("XuanDesk: 3D desktop %s" % ("shown" if _desktop_shown else "hidden"))
 
 
 ## The host's own events. The HUD answers the two that are its own
-## (HudWindow._on_host_event); the desktop one is the shell's, and it has to be
-## answered with no HUD window around too.
+## (HudWindow._on_host_event); the desktop one is the shell's, and the tray's rows are
+## the shell's too - they are the same requests its 菜单 rows used to send, arriving
+## from a window that is not ours.
 func _on_host_event(name: String) -> void:
 	if name == "toggle_desktop":
 		_toggle_desktop()
+	elif name.begins_with("menu background "):
+		_on_background_selected(name.substr("menu background ".length()))
+	elif name.begins_with("menu screen "):
+		_on_screen_selected(int(name.substr("menu screen ".length())))
 
 
 ## A respawned host starts out believing the desktop is shown (its flag is a
 ## fresh process'), so the switch is re-sent whenever the link comes up - the only
-## state the two sides share that the client, not the host, owns.
+## state the two sides share that the client, not the host, owns. The tray's model
+## goes with it: the hours between two hosts are hours in which the model changed
+## without anyone to send it to.
 func _on_host_online(is_online: bool) -> void:
 	if is_online:
 		metrics.send_command("wall %d" % (1 if _desktop_shown else 0))
@@ -191,6 +275,7 @@ func _on_host_online(is_online: bool) -> void:
 		# that shows it (the fit is a resize, exactly like the 显示器 row's move)
 		if _desktop_shown and _background != null:
 			_background.request_redraw()
+		_push_tray_model()
 
 
 ## Replaces the live background, fading through black so the viewport never
@@ -233,11 +318,12 @@ func _switch(id: String, animate := true) -> void:
 	_vignette.shader = grade
 
 	if hud_window != null:
-		hud_window.set_current(id)
 		hud_window.set_content(next.build_hud(), next.hud_size())
-	if menu_window != null:
-		# after build(): the switch states are the background's own (计划 §6.4)
-		menu_window.set_switches(next.menu_switches())
+		_place_desktop_chip(next)
+	else:
+		# no HUD (--hud=0): the 桌面 row still belongs to somebody
+		_desk_row = _wallpaper
+		_push_tray_model()
 
 	if animate:
 		await _fade_to(0.0)
@@ -308,8 +394,6 @@ func _capture() -> void:
 	var viewport: Viewport = get_viewport()
 	if target == "hud" and hud_window != null:
 		viewport = hud_window.get_viewport()
-	elif target == "menu" and hud_window != null:
-		viewport = hud_window.menu_window()
 	await Shots.capture(viewport, opts.text("shot", "shot.png"),
 			int(opts.num("shot_frames", 90.0)), target)
 	_quit()

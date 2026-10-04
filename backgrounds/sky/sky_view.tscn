@@ -1,0 +1,24 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://backgrounds/sky/sky_view.gd" id="1_view"]
+[ext_resource type="Shader" path="res://backgrounds/sky/shaders/dome.gdshader" id="2_dome"]
+
+[sub_resource type="SphereMesh" id="SphereMesh_sky"]
+radius = 500.0
+height = 1000.0
+radial_segments = 64
+rings = 32
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_dome"]
+shader = ExtResource("2_dome")
+
+[node name="SkyView" type="Node3D"]
+script = ExtResource("1_view")
+
+[node name="SkySphere" type="MeshInstance3D" parent="."]
+mesh = SubResource("SphereMesh_sky")
+material_override = SubResource("ShaderMaterial_dome")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.70710677, -0.70710677, 0, 0.70710677, 0.70710677, 0, 0, 0)
+fov = 110.0

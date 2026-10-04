@@ -10,6 +10,10 @@
 shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
 
+// where a vertex of the sky goes on the frame, in place of the camera's own
+// rectilinear lens (the reasoning is in the include)
+#include "res://backgrounds/sky/shaders/sky_projection.gdshaderinc"
+
 uniform float twinkle_rate = 1.7;
 // sine of the altitude over which stars fade into the horizon
 uniform float horizon_fade = 0.035;
@@ -32,6 +36,7 @@ void vertex() {
 	// to grow it from is the radius along that direction
 	vec3 base = normalize(VERTEX) * sphere_radius;
 	VERTEX = base + (VERTEX - base) * size_scale;
+	POSITION = SKY_CLIP(VIEW_MATRIX * MODEL_MATRIX * vec4(VERTEX, 1.0));
 	star_colour = COLOR.rgb;
 	float phase = UV2.x;
 	float amp = UV2.y;

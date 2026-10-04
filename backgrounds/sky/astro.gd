@@ -60,7 +60,7 @@ static func unix_from_julian_day(jd: float) -> float:
 
 ## Greenwich mean sidereal time in degrees (计划 §6.2). U.T. in, 0.1 s of arc of
 ## the polynomial's own accuracy - it reproduces Meeus' worked example 12.a to
-## 2e-5 s (tests/sky_probe.gd).
+## 2e-5 s (.tmp/tests/sky_probe.gd).
 static func gmst_deg(jd: float) -> float:
 	var t := (jd - J2000) / 36525.0
 	var turns := 280.46061837 + 360.98564736629 * (jd - J2000) + 0.000387933 * t * t \
@@ -142,7 +142,7 @@ static func azimuth_of(direction: Vector3) -> float:
 
 ## Altitude and azimuth of an equatorial position, straight from the spherical
 ## trigonometry (计划 §6.2) rather than through sky_basis(). Returns
-## Vector2(altitude, azimuth); the two paths agreeing is what tests/sky_probe.gd
+## Vector2(altitude, azimuth); the two paths agreeing is what .tmp/tests/sky_probe.gd
 ## checks. `ra_deg`/`dec_deg` must be for the same equinox as `sidereal_deg`,
 ## which is local sidereal time in degrees (lst_deg() above).
 static func altaz(ra_deg: float, dec_deg: float, sidereal_deg: float,

@@ -11,6 +11,13 @@
 ## the Moon's rather than the Sun's. It is walked again when the day turns, because
 ## the node regresses 0.05 deg a day and nothing else about it moves that fast.
 ##
+## It is drawn only while the Moon itself is in the frame (2026-10-12, at the user's
+## asking): it is the Moon's own line, and a 白道 sweeping across a frame the Moon
+## is not in says the Moon is there - the plainer reading is that a body's track
+## belongs on screen with the body. Where the Moon is in frame the whole loop is
+## drawn as before; the cut is the disc's position in the camera's frustum, which
+## the sky hands over whenever the view moves (set_view).
+##
 ## The disc is placed again on every time step and never rebuilt; while the Moon is
 ## below the horizon its shader cuts it off at the horizon line like every other
 ## layer, and the orbit takes the same cut through the line shader.
@@ -58,6 +65,10 @@ var _jd := 0.0
 var _orbit_day := NAN
 var _night := 1.0
 var _zoom := 1.0
+## Whether the Moon's disc is inside the camera's frame, which is what decides
+## whether the orbit is drawn at all. True until a view is handed over: a camera
+## that has not been looked through yet is not a reason to drop the line.
+var _in_view := true
 
 
 func _init() -> void:
@@ -70,6 +81,10 @@ func _init() -> void:
 	mesh.radial_segments = 48
 	mesh.rings = 24
 	_disc.mesh = mesh
+	# the sky's own map puts this disc wherever its direction lands, which reaches
+	# outside the camera's frustum: bounds that hold the camera keep it on the
+	# wallpaper at any bearing (SkyProjection)
+	SkyProjection.keep_visible(_disc)
 	_material = ShaderMaterial.new()
 	_material.shader = load(SHADER)
 	_disc.material_override = _material
@@ -91,6 +106,31 @@ func place(jd: float, sun_direction: Vector3) -> void:
 	if is_nan(_orbit_day) or absf(floor(jd) - _orbit_day) >= 1.0:
 		_build_orbit(is_nan(_orbit_day))
 		_orbit_day = floor(jd)
+
+
+## Where the disc stands against the camera's frame: the sky hands the camera over
+## every time the view moves, and the orbit is drawn only if the Moon is in frame
+## (the class comment). The test is the disc's own place, so "in view" means the Moon
+## is - the ribbon is a hairline across the whole sky and has no bearing on it.
+##
+## The disc itself needs no such test: the map draws it wherever its direction lands
+## and keep_visible keeps the frustum off it (SkyProjection) - so the ribbon only has
+## to ask about the Moon. The map's frame is the wallpaper's, so the size comes from
+## the camera's own viewport; before there is one - the sky builds its layers before
+## the frame it will be drawn in exists - the ribbon is drawn, which is what a view
+## nothing has asked anything of yet does.
+func set_view(camera: Camera3D) -> void:
+	var viewport := camera.get_viewport()
+	if viewport == null:
+		_in_view = true
+		_apply_orbit()
+		return
+	var size := viewport.get_visible_rect().size
+	# the disc's own reach on the frame, so a Moon whose centre has just crossed the
+	# edge - half of it still on the wallpaper - keeps its ribbon
+	var reach := disc_radius * SkyProjection.pixels_per_unit(camera, size, RADIUS)
+	_in_view = SkyProjection.in_frame(camera, _disc.global_position, size, reach)
+	_apply_orbit()
 
 
 ## How much of the night is left, the same number the star layers are given: the
@@ -174,5 +214,6 @@ static func _gap_deg(from_deg: float, to_deg: float) -> float:
 func _apply_orbit() -> void:
 	if _orbit == null:
 		return
+	_orbit.visible = _in_view
 	_orbit.material_override.set_shader_parameter("night", _night)
 	_orbit.material_override.set_shader_parameter("size_scale", _zoom)

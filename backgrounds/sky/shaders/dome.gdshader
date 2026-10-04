@@ -16,6 +16,13 @@
 shader_type spatial;
 render_mode unshaded, cull_front, shadows_disabled, fog_disabled;
 
+// where a vertex of the sky goes on the frame, in place of the camera's own
+// rectilinear lens (the reasoning is in the include). The dome is the layer that
+// has to cover the whole frame, so it is the one that leans on it hardest: the
+// map's frame is wider than the lens', and the sphere behind it has a direction
+// for every pixel of it.
+#include "res://backgrounds/sky/shaders/sky_projection.gdshaderinc"
+
 // night
 uniform vec3 night_zenith : source_color = vec3(0.090, 0.130, 0.260);
 uniform vec3 night_horizon : source_color = vec3(0.200, 0.260, 0.420);
@@ -98,6 +105,7 @@ vec3 milky_way(vec3 dir) {
 void vertex() {
 	local_pos = VERTEX;
 	world_dir = normalize((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz);
+	POSITION = SKY_CLIP(VIEW_MATRIX * MODEL_MATRIX * vec4(VERTEX, 1.0));
 }
 
 void fragment() {

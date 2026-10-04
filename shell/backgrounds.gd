@@ -20,7 +20,8 @@ const ENTRIES := {
 
 ## The background the app opens with when `--background` names none. Kept apart
 ## from the entry order above, which is the picker's: 换桌面 still lists 水族箱
-## first, and the menu marks whichever is live by name (`HudMenu.set_current`),
+## first, and the tray's 换桌面 submenu marks whichever is live by name (the model
+## shell/main.gd pushes carries both the id and the display name),
 ## not by position.
 const DEFAULT := "sky"
 

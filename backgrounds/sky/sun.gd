@@ -36,6 +36,10 @@ func _init() -> void:
 	mesh.orientation = PlaneMesh.FACE_Z
 	mesh.size = Vector2(half, half) * 2.0
 	_disc.mesh = mesh
+	# the sky's own map puts this quad wherever its direction lands, which reaches
+	# outside the camera's frustum: without bounds that hold the camera the Sun is
+	# culled while it is still on the wallpaper
+	SkyProjection.keep_visible(_disc)
 	_material = ShaderMaterial.new()
 	_material.shader = load(SHADER)
 	_disc.material_override = _material

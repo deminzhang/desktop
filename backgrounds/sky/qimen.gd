@@ -310,7 +310,7 @@ static func _arrange_rotating(palaces: Array, ju: int, duty_gong: int,
 	# 中宫's 寄坤) takes a foreign palace's door. The reference's own plates show
 	# it: 2026-01-22 03:00 (值符宫 中, 寄坤) carries 生门 on 坤 where 死门 belongs, so
 	# that plate has 生门 twice and no 死门 at all. Both lines index through
-	# GONG_TO_ROLL here, and tests/xuan_probe.gd holds every chart to the ring
+	# GONG_TO_ROLL here, and .tmp/tests/xuan_probe.gd holds every chart to the ring
 	# turning as a whole - which is what the reference's version breaks.
 	palaces[star_pos]["star"] = _star9_full(duty_roll)
 	palaces[door_pos]["door"] = _door8_full(GONG_TO_ROLL[duty_roll])
