@@ -134,6 +134,13 @@ static int g_match_pid = 1;
  * why the fit below shows or hides rather than always showing. */
 static int g_wall_shown = 1;
 
+/* The client's 穿透 switch (2026-10-13). The state is kept here rather than just
+ * stamped once, because the HUD window is looked up by title on every
+ * housekeeping pass - the client can ask before this process has found it - and
+ * because a respawned host has to be told again (the client re-sends it with the
+ * wall/screen pair, main.gd _on_host_online). */
+static int g_hud_locked = 0;
+
 /* The monitors the client can put the wallpaper on (2026-10-10). Index 0 is the
  * primary whatever order the system enumerates in; the client shows this list in
  * the HUD menu and answers with "screen <index>". */
@@ -501,6 +508,19 @@ static void apply_one_overlay(const char *title, HWND *slot, int *shown) {
 	LONG_PTR ex = GetWindowLongPtrA(*slot, GWL_EXSTYLE);
 	LONG_PTR want = ex | WS_EX_TOPMOST | WS_EX_TOOLWINDOW;
 	if (g_no_activate) want |= WS_EX_NOACTIVATE;
+	/* 穿透. Godot's own Window.mouse_passthrough cannot do this on Windows: the
+	   platform layer only makes the window answer WM_NCHITTEST with
+	   HTTRANSPARENT (display_server_windows.cpp), and the system hands that to
+	   underlying windows *in the same thread* - measured, the click is swallowed
+	   and the app under the HUD gets nothing. What Windows honours across
+	   processes is the layered pair, and the HUD keeps drawing with it (it is
+	   DWM-composited either way; measured: same ink before and after).
+	   Windows never sets these two itself, so clearing them here is safe. */
+	if (g_hud_locked) {
+		want |= WS_EX_LAYERED | WS_EX_TRANSPARENT;
+	} else {
+		want &= ~((LONG_PTR)(WS_EX_LAYERED | WS_EX_TRANSPARENT));
+	}
 	if (want != ex) {
 		SetWindowLongPtrA(*slot, GWL_EXSTYLE, want);
 		logf_("overlay exstyle %llx -> %llx", (unsigned long long)ex, (unsigned long long)want);
@@ -762,11 +782,28 @@ static const char *next_token(const char *p, char *out, int out_size) {
 }
 
 
-/* snprintf cuts by bytes and a cut in the middle of a UTF-8 character is a mojibake
- * in the menu, so drop a truncated tail. */
+/* copy_str cuts by bytes, and a cut in the middle of a UTF-8 character is a
+ * mojibake in the menu, so an *incomplete* trailing character is dropped - only an
+ * incomplete one. Every character above ASCII ends in a continuation byte, so
+ * "drop the trailing continuation bytes" ate the last character of every Chinese
+ * label and left its dangling lead byte behind: 2026-10-14 用户 "换桌面的菜单项尾部
+ * 有乱码" - 水族箱 came out as 水族 + one stray byte (drawn as the replacement glyph),
+ * 星空 as 星 + one. So measure the character the tail belongs to and drop it whole
+ * only when the string ends before its last byte. */
 static void trim_utf8(char *s) {
-	size_t n = strlen(s);
-	while (n > 0 && ((unsigned char)s[n - 1] & 0xC0) == 0x80) s[--n] = 0;
+	int n = (int)strlen(s);
+	int i = n;
+	while (i > 0 && ((unsigned char)s[i - 1] & 0xC0) == 0x80) i--;  /* back to its lead byte */
+	if (i == 0) {   /* nothing but continuation bytes: no character to keep */
+		s[0] = 0;
+		return;
+	}
+	unsigned char lead = (unsigned char)s[i - 1];
+	int want = 1;                         /* ASCII (and anything invalid) is one byte */
+	if ((lead & 0xE0) == 0xC0) want = 2;
+	else if ((lead & 0xF0) == 0xE0) want = 3;
+	else if ((lead & 0xF8) == 0xF0) want = 4;
+	if (i - 1 + want > n) s[i - 1] = 0;   /* the cut split it: the whole character goes */
 }
 
 
@@ -1021,6 +1058,7 @@ static int sock_send(const char *buf, int len) {
  *   quit                            exit (the client stops the host through this)
  *   wall 0|1                        show/hide the 3D desktop
  *   screen <n>                      put the 3D desktop on monitor n
+ *   lock 0|1                        whether the HUD passes the mouse through (穿透)
  *   menu reset                      forget the tray model; the rows below refill it
  *   menu bg <i> <cur> <id> <label>  a 换桌面 row
  *   menu screen <i> <cur> <label>   a 显示器 row (only drawn when there are 2+)
@@ -1043,6 +1081,15 @@ static void handle_command(const char *line) {
 			logf_("desktop %s by client request", g_wall_shown ? "shown" : "hidden");
 			apply_wallpaper();
 		}
+	} else if (!strncmp(line, "lock ", 5)) {
+		/* The client's 穿透 switch: the HUD window goes transparent to the mouse
+		   (see apply_one_overlay for why this is done here and not in Godot). */
+		int locked = line[5] != '0';
+		if (locked != g_hud_locked) {
+			g_hud_locked = locked;
+			logf_("hud mouse passthrough %s by client request", locked ? "on" : "off");
+		}
+		apply_overlay();
 	} else if (!strncmp(line, "screen ", 7)) {
 		/* Which monitor the 3D desktop is on (2026-10-10). The list is the one
 		   enumerated at startup and refreshed by housekeeping, so an index the

@@ -4,10 +4,18 @@
 ## Nothing is glued to it any more: the shell's chrome - the 菜单 - lives in the
 ## notification area since 2026-10-13 (the tray icon and Win32 popup bin/host.exe
 ## owns, see the tray block in native/host.c). That is also what keeps 穿透
-## escapable: 穿透 passes every mouse event through this window
-## (`Window.mouse_passthrough`), and a window that has passed the mouse through has
-## passed it through everywhere, so nothing drawn *in* it stays clickable - while a
-## tray icon is not a window of ours at all.
+## escapable: 穿透 passes every mouse event through this window, and a window that
+## has passed the mouse through has passed it through everywhere, so nothing drawn
+## *in* it stays clickable - while a tray icon is not a window of ours at all.
+##
+## 穿透 itself is not done with Godot's `Window.mouse_passthrough` (2026-10-13):
+## on Windows that flag only makes the window answer WM_NCHITTEST with
+## HTTRANSPARENT, which the system forwards to underlying windows *in the same
+## thread* - so the HUD stopped taking clicks but nothing underneath got them
+## either (measured; see native/host.c apply_one_overlay). The window style
+## Windows honours across processes is the host's business, like its topmost /
+## tool-window / no-activate bits: this class owns the flag and says when it
+## turned over.
 ##
 ## Everything in here is whatever the current background built. Switching a
 ## background replaces the content and resizes this window to match.
@@ -25,7 +33,12 @@ signal quit_requested
 ## the two are kept in step through this (2026-10-13).
 signal passthrough_changed(locked: bool)
 
+## The gap the window is seeded at: `MARGIN` from the usable area's right edge,
+## `TOP_MARGIN` from its top (用户 2026-10-14: the HUD's default distance from the
+## screen top is 100). Only the first placement uses them - thereafter the window
+## stays where the user dragged it (`_placed`).
 const MARGIN := 26
+const TOP_MARGIN := 100
 const SEED_SIZE := Vector2i(320, 200)
 
 var metrics: MetricsClient
@@ -92,16 +105,19 @@ func _default_position() -> Vector2i:
 	var screen := DisplayServer.get_primary_screen()
 	var usable := DisplayServer.screen_get_usable_rect(screen)
 	return Vector2i(usable.position.x + usable.size.x - size.x - MARGIN,
-			usable.position.y + MARGIN)
+			usable.position.y + TOP_MARGIN)
 
 
 ## The one switch that is about the mouse rather than about the sky: with it on,
 ## every event this window sees is passed to the desktop under it. The tray icon is
 ## what stays clickable when it is on (2026-10-13) - before that it was the menu
 ## window sitting on this one's corner.
+##
+## The window style that does the passing is the host's to set (it owns this
+## window's styles and holds the same flag): this only turns the flag over and
+## says so, which is what main.gd sends to the host and what the tray's row shows.
 func _toggle_lock() -> void:
 	_locked = not _locked
-	mouse_passthrough = _locked
 	passthrough_changed.emit(_locked)
 	print("XuanDesk: HUD mouse passthrough %s" % ("on" if _locked else "off"))
 

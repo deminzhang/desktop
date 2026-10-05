@@ -19,19 +19,24 @@ const GAP := 5.0        ## minimum clear space between two names
 const SHADOW := Color(0.0, 0.0, 0.0, 0.6)
 const FADE := 0.06      ## sine of the altitude names have faded out by
 
-## The 宿 are a scale on the equator rather than a figure, so they are drawn in the
-## warm ink the ground ring uses and sit just south of the line they divide; the
-## planets carry their own name above the mark.
+## The 宿 are a scale on the equator rather than a figure: each one's name stands at the
+## middle of its own 分野 - the span its 距星 opens - just south of the line that divides
+## it (2026-10-14, 用户: "天赤道线上淡色标下星宿分野…仅星宿开关开时显宿名"). The ink is
+## the **pale gold** that band is drawn in (sky.gd's equator is 淡赤 and its 分野 ticks
+## 淡金), lighter and fainter than the 星官 names at the star groups: a name on the
+## equator reads as the division's, a name at the stars as the group's.
 const MANSION_SIZE := 13
 const MANSION_LIFT := -9.0
-const MANSION_COLOUR := Color(0.90, 0.78, 0.54, 0.60)
-## The 星官 names (2026-10-10): one per star group of the 宿 the sky draws
-## (MansionFigures), in the same warm ink a shade dimmer and a size smaller than the
-## 宿's own scale - a 宿 is a dozen 星官 and its name is the one that has to stay
-## readable. They ride the 菜单's 星宿 switch with the ribbons they name.
+const MANSION_COLOUR := Color(0.95, 0.87, 0.60, 0.52)
+## The 星官 names: one per star group of the 宿 the sky draws (MansionFigures), written
+## at the stars themselves in **gold** (2026-10-14, 用户: "星宿本体星组处用金色显名") - the
+## same gold the dial writes 值符 by (SkyCompassHud.C_DUTY), so 金 means one thing on the
+## card and on the sky. A size smaller than the 宿's own name: a 宿 is a dozen 星官 and
+## the division's name is the one that has to stay readable. They ride the card's 星宿
+## switch with the ribbons they name.
 const MANSION_FIGURE_SIZE := 12
 const MANSION_FIGURE_LIFT := 9.0
-const MANSION_FIGURE_COLOUR := Color(0.86, 0.72, 0.46, 0.62)
+const MANSION_FIGURE_COLOUR := Color(1.00, 0.84, 0.45, 0.85)
 const PLANET_SIZE := 13
 const PLANET_LIFT := 11.0
 const PLANET_COLOUR := Color(0.96, 0.86, 0.60, 0.92)
@@ -58,31 +63,28 @@ const POLARIS_LIFT := 11.0
 const POLARIS_COLOUR := Color(0.92, 0.96, 1.00, 0.95)
 const POLARIS_NAME := "北极星"
 
-## 北斗 (2026-10-12 第二十一轮: "北斗星名加一下"): the Dipper, named the way 北极星 is -
-## the sky writes two star names of its own and both are the ones a naked-eye reader
-## navigates by, the Dipper's two bowl stars being what points at the pole star.
+## 北斗 (2026-10-12 第二十一轮: "北斗星名加一下"): the Dipper is the one shape on the sky
+## whose stars carry names of their own, and they are read by the card's 星宿 switch,
+## which picks between two sets of them (2026-10-14 用户: "北斗星在星宿开关开时显贪狼武曲这套
+## 神名.关时显天枢天玑这套名").
 ##
-## Named at the asterism's centre of figure rather than at any one of its stars: the
-## seven are spread over 25 deg, so a name hung on α UMa alone would read as that
-## star's and not the shape's. Like the pole star it is a star, not a figure, so the
-## 星座 switch leaves it alone - but the card's 星宿 switch does not, because the names
-## it gives way to are that switch's (see DIPPER_STARS).
-const DIPPER_SIZE := 15
-const DIPPER_LIFT := 11.0
-const DIPPER_COLOUR := Color(0.92, 0.96, 1.00, 0.95)
-const DIPPER_NAME := "北斗"
-
-## 北斗九星 (2026-10-12 第二十一轮: "北斗在星宿开关开时，显示北斗九星的名字"): the
-## Dipper's own stars, named one by one. They are the Chinese sky's own names and they
-## go on the card's 星宿 switch with the 宿's and the 星官's - the 斗 is the shape those
-## names are read in. While that switch is off the single 北斗 above stands in for
-## them (it is the asterism, and the nine are the detail).
+## While that switch is off each of the eight wears the name the sky's own tradition
+## gives it - 天枢 α, 天璇 β, 天玑 γ, 天权 δ, 玉衡 ε, 开阳 ζ, 摇光 η and 左辅 (Alcor, 80 UMa,
+## the small star on 开阳's shoulder) - the names a naked-eye reader navigates by, the
+## 斗's two bowl stars being what points at the pole star. While it is on, the same
+## eight wear the 神名 of the 九星, star by star: 贪狼, 巨门, 禄存, 文曲, 廉贞, 武曲, 破军
+## and 洞明 - 八白左辅's own 神名, whose 星名 is the 左辅 the other set calls it, so that
+## is the one star whose two names are not both in daily use.
+##
+## One name per star, so the Dipper is read star by star and no longer carries a 北斗
+## of its own: the single name that used to stand at the seven's centre of figure was
+## what the 星宿 switch gave way to, and now the eight stars speak for themselves in
+## both of its states.
 ##
 ## Each entry carries the catalogue's own designation - a Bayer letter, or the
-## Flamsteed number for 左辅, which has no letter - and the name the tradition gives
-## that star. 天枢 α, 天璇 β, 天玑 γ and 天权 δ draw the 斗's bowl, 玉衡 ε, 开阳 ζ and
-## 摇光 η its handle, and 左辅 is the small star beside 开阳 (Alcor, 80 UMa): the
-## eighth of the 九星.
+## Flamsteed number for 左辅, which has no letter - and both names. 天枢 α, 天璇 β,
+## 天玑 γ and 天权 δ draw the 斗's bowl, 玉衡 ε, 开阳 ζ and 摇光 η its handle, and 左辅 is
+## the eighth of the 九星.
 ##
 ## The ninth is 右弼, which the tradition itself calls the *unseen* one - there is no
 ## star where it belongs, and this layer names stars, so eight are drawn. (The rule is
@@ -95,34 +97,36 @@ const DIPPER_NAME := "北斗"
 ## itself does with it (左辅 is read as 开阳's attendant, not as a star of its own).
 const DIPPER_ATTENDANT_LIFT := -14.0
 const DIPPER_STARS := [
-	{"letter": "α", "number": 0, "name": "天枢"},
-	{"letter": "β", "number": 0, "name": "天璇"},
-	{"letter": "γ", "number": 0, "name": "天玑"},
-	{"letter": "δ", "number": 0, "name": "天权"},
-	{"letter": "ε", "number": 0, "name": "玉衡"},
-	{"letter": "ζ", "number": 0, "name": "开阳"},
-	{"letter": "η", "number": 0, "name": "摇光"},
-	{"letter": "", "number": 80, "name": "左辅", "lift": DIPPER_ATTENDANT_LIFT},
+	{"letter": "α", "number": 0, "name": "天枢", "god": "贪狼"},
+	{"letter": "β", "number": 0, "name": "天璇", "god": "巨门"},
+	{"letter": "γ", "number": 0, "name": "天玑", "god": "禄存"},
+	{"letter": "δ", "number": 0, "name": "天权", "god": "文曲"},
+	{"letter": "ε", "number": 0, "name": "玉衡", "god": "廉贞"},
+	{"letter": "ζ", "number": 0, "name": "开阳", "god": "武曲"},
+	{"letter": "η", "number": 0, "name": "摇光", "god": "破军"},
+	{"letter": "", "number": 80, "name": "左辅", "god": "洞明", "lift": DIPPER_ATTENDANT_LIFT},
 ]
-## How many of DIPPER_STARS draw the 斗 itself: the rest (左辅) stands off to the side,
-## so the asterism's own name is the mean of these.
-const DIPPER_SEVEN := 7
 const DIPPER_ABBREV := "UMa"
-## One named star of the 斗: a step smaller than the asterism's own name, in the ink
-## the two star names are written in - so the nine read as stars where the 宿 and 星官
-## names beside them read as the amber divisions they are.
+## One named star of the 斗: a step smaller than the pole star's own name, in the ink
+## 北极星 is written in - so the eight read as stars where the 宿, 星官 and 节气 names
+## beside them read as the divisions they are.
 const DIPPER_STAR_SIZE := 12
 const DIPPER_STAR_LIFT := 9.0
 const DIPPER_STAR_COLOUR := Color(0.86, 0.92, 1.00, 0.82)
 
-## The four cardinal points of the ecliptic - the two equinoxes and the two
-## solstices, the signs' quarters - in the accent the HUD chrome uses: they are the
-## sky's own marks, not things in it, and Ecliptic hands over the points the λ it
-## measures is read from. All four are named; the points themselves carry the same
-## tick every other solar term does.
-const CARDINAL_SIZE := 14
-const CARDINAL_LIFT := 13.0
-const CARDINAL_COLOUR := Color(0.42, 0.88, 1.00, 0.95)
+## The twenty-four solar terms of the ecliptic, in the accent the HUD chrome uses: they
+## are the sky's own marks, not things in it, and Ecliptic hands over the points the λ
+## it measures is read from. All twenty-four are named here, and the layer keeps the
+## HUD's cyan rather than the amber the 宿 and 星官 names are written in, so the two
+## scales - the ecliptic's 15° steps and the equator's unequal 宿 - stay apart at a
+## glance (2026-10-14 用户: "二十四节气都显出").
+##
+## They ride the card's 星宿 switch beside the 宿's own names (see set_mansions_shown):
+## both are divisions λ and the 宿度 are read against, and the ticks they name are
+## drawn on the sphere either way.
+const TERM_SIZE := 14
+const TERM_LIFT := 13.0
+const TERM_COLOUR := Color(0.42, 0.88, 1.00, 0.95)
 
 ## The zenith (2026-10-10): the point straight up has no star on it, and it is
 ## where the HUD's 天顶 button aims the view - so the sky hangs a hollow cross on
@@ -134,7 +138,16 @@ const CARDINAL_COLOUR := Color(0.42, 0.88, 1.00, 0.95)
 ## Screen-space on purpose: a crosshair keeps its size while the sky zooms (the
 ## sky's own geometry is scaled by fov / BASE_FOV; a reticle that scaled would be
 ## a nine-pixel cross at one zoom and a wall of dashes at another).
-const ZENITH_COLOUR := Color(0.42, 0.88, 1.00, 0.60)
+##
+## Faint white (用户 2026-10-14: "标个淡白色虚十字"): every other mark on this layer
+## belongs to something in the sky and is written in that thing's own ink - gold at the
+## 星官, pale gold on the equator, the cyan of the card's chrome for the 节气 - and this
+## one is the observer's own vertical, so it is neither warm nor cyan. 0.45 of white over
+## the night dome is a mark the eye finds when it looks for it and never reads as a star.
+##
+## The opening view puts the zenith's own point on the frame's top edge, so what shows at
+## the default framing is the lower half of this cross (CameraRig::OPENING_ALTITUDE/FOV).
+const ZENITH_COLOUR := Color(1.00, 1.00, 1.00, 0.45)
 const ZENITH_GAP := 4.0       ## the hollow centre, either side of the point
 const ZENITH_DASH := 3.0      ## one dash of an arm
 const ZENITH_SPACE := 2.0
@@ -165,16 +178,13 @@ var _mansions_shown := true
 ## null when it is not in the catalogue: a name is not drawn for a star that is
 ## not there.
 var _polaris: Variant = null
-## 北斗's own direction: the mean of the seven stars' directions, or null when the
-## catalogue holds none of them.
-var _dipper: Variant = null
-## The 斗's stars as names, [{name, direction}], one per star the catalogue holds:
-## drawn on the card's 星宿 switch, with the asterism's own name standing in for them
-## while that switch is off.
+## The 斗's stars as names, one entry per star the catalogue holds:
+## {name, god, direction} - the 星名 and the 神名 of the same star, which of the two is
+## drawn being the card's 星宿 switch (see DIPPER_STARS).
 var _dipper_names: Array = []
-## The ecliptic's four cardinal points, handed over by the sky with the ecliptic
+## The ecliptic's twenty-four solar terms, handed over by the sky with the ecliptic
 ## they are measured on - Ecliptic draws the ticks, this draws the names.
-var _cardinals: Array = []
+var _terms: Array = []
 ## Whether the 88 constellation names are drawn: the 菜单's 星座 switch, which is
 ## about the constellations alone. The 宿 and the planets stay - they are not
 ## figures, and a switch that took them off with the figures would be lying about
@@ -199,7 +209,6 @@ func setup(catalogue: StarCat, camera_3d: Camera3D, root: Node3D) -> void:
 		push_warning("XuanDesk: sky: 北极星 (α UMi) not in the catalogue, name dropped")
 	else:
 		_polaris = StarCat.direction(catalogue.ra[polaris], catalogue.dec[polaris])
-	_dipper = _dipper_direction(catalogue)
 	_dipper_names = _dipper_star_names(catalogue)
 	# a Control under a CanvasLayer gets no layout from a Control parent, so it
 	# takes the viewport's size and follows it
@@ -208,30 +217,12 @@ func setup(catalogue: StarCat, camera_3d: Camera3D, root: Node3D) -> void:
 	refresh()
 
 
-## Where 北斗's name stands: the mean of the 斗's own seven stars' directions on the
-## sphere - the asterism's centre of figure, which is the only point it has (the seven
-## are a shape, not a body). A star the catalogue is missing is left out of the sum; a
-## Dipper with none of its seven in the catalogue gets no name at all.
-static func _dipper_direction(catalogue: StarCat) -> Variant:
-	var sum := Vector3.ZERO
-	var found := 0
-	for i in DIPPER_SEVEN:
-		var index := _dipper_index(catalogue, DIPPER_STARS[i])
-		if index < 0:
-			continue
-		sum += StarCat.direction(catalogue.ra[index], catalogue.dec[index])
-		found += 1
-	if found == 0:
-		push_warning("XuanDesk: sky: 北斗七星 not in the catalogue, name dropped")
-		return null
-	return sum.normalized()
-
-
-## The 斗's own stars, each with its Chinese name: one entry per star the catalogue
-## holds, {name, direction} - the layer this is drawn on is the card's 星宿 switch (see
-## DIPPER_STARS). A star the catalogue is missing is dropped from its own list and
-## reported: the nine are the *names* of eight stars that are there, and inventing a
-## place for the one that has none is not this sky's business.
+## The 斗's own stars, each with both of its Chinese names: one entry per star the
+## catalogue holds, {name, god, direction} - the layer this is drawn on is the card's
+## 星宿 switch, which picks the name out of the two (see DIPPER_STARS). A star the
+## catalogue is missing is dropped from its own list and reported: the nine are the
+## *names* of eight stars that are there, and inventing a place for the one that has
+## none is not this sky's business.
 static func _dipper_star_names(catalogue: StarCat) -> Array:
 	var out := []
 	var missing := []
@@ -240,7 +231,7 @@ static func _dipper_star_names(catalogue: StarCat) -> Array:
 		if index < 0:
 			missing.append(String(entry["name"]))
 			continue
-		var named := {"name": String(entry["name"]),
+		var named := {"name": String(entry["name"]), "god": String(entry["god"]),
 				"direction": StarCat.direction(catalogue.ra[index], catalogue.dec[index])}
 		# a star whose name cannot hang over it (左辅, on 开阳's shoulder) carries the
 		# lift its own entry asks for; the rest take the layer's own
@@ -295,19 +286,21 @@ func set_mansion_figures(entries: Array) -> void:
 
 ## The card's 星宿 switch, handed over by the sky with the figure layer itself: the
 ## 宿's own names, their ribbons and their 星官 names go together (用户 2026-10-12
-## 第二十一轮: 28宿名只在星宿开着时显), and the 宿's *scale* - the equator and the 距星
-## ticks - stays on the sky alone, the same way the 星座 switch leaves the 宿 and the
-## planets (SkyLabels.set_figures).
+## 第二十一轮: 28宿名只在星宿开着时显), the 廿四节气 names with them (2026-10-14 用户:
+## "二十四节气…仅星宿开关开时显"), and the 斗's stars change which of their two names
+## they wear (see DIPPER_STARS). The 宿's *scale* - the equator, the 距星 ticks and the
+## ecliptic's own ticks - stays on the sky alone, the same way the 星座 switch leaves
+## the 宿 and the planets (SkyLabels.set_figures).
 func set_mansions_shown(on: bool) -> void:
 	_mansions_shown = on
 	refresh()
 
 
-## The ecliptic's four cardinal points (Ecliptic.cardinal_points), handed over with
-## the ecliptic itself: the two equinoxes and the two solstices, in the catalogue
-## frame at the sky's own instant.
-func set_cardinals(entries: Array) -> void:
-	_cardinals = entries
+## The ecliptic's twenty-four solar terms (Ecliptic.term_points), handed over with the
+## ecliptic itself, in the catalogue frame at the sky's own instant: the names of the
+## divisions whose ticks Ecliptic draws.
+func set_terms(entries: Array) -> void:
+	_terms = entries
 	refresh()
 
 
@@ -333,41 +326,37 @@ func _draw() -> void:
 		return
 	var basis := sky_root.global_transform.basis
 	var placed: Array[Rect2] = []
-	# The six single named marks first - the four cardinal points of the ecliptic, the
-	# pole star and 北斗 are one point each, and a name that yields is gone for good,
-	# while a planet's or a constellation's simply moves a few pixels (2026-10-10:
-	# 海王星 stands within a degree of the vernal equinox this decade, and took the
-	# row off 春分). The Moon joins them: it is one body with a disc under its name,
-	# and the disc is what makes it the thing to look at. Then the seven planets and
-	# the 宿, then the plentiful layer (88 names), which is the one that makes way.
-	for entry in _cardinals:
-		_place(entry, placed, basis, CARDINAL_SIZE, CARDINAL_COLOUR, CARDINAL_LIFT)
+	# The single named marks first - the pole star, the Moon and each of the 斗's stars
+	# are one point each, and a name that yields is gone for good, while a planet's or a
+	# constellation's simply moves a few pixels. The Moon joins them: it is one body
+	# with a disc under its name, and the disc is what makes it the thing to look at.
+	# Then the seven planets and the 星宿 switch's own divisions (the 宿, the 廿四节气 and
+	# the 星官 inside the 宿 - they sit under the planets because a planet stands on the
+	# ecliptic itself, where a 节气 name would otherwise take the row off 火星 every
+	# time), then the plentiful layer (88 names), which is the one that makes way.
 	if _polaris != null:
 		_place({"name": POLARIS_NAME, "direction": _polaris}, placed, basis,
 				POLARIS_SIZE, POLARIS_COLOUR, POLARIS_LIFT)
-	# 北斗九星, then 北斗 itself: the nine are the detail and the asterism is the same
-	# reading one level up, so the detail keeps its place and the asterism's own name
-	# yields to it where the two would stand on top of each other - 天权 δ is within a
-	# degree and a half of the seven's centre of figure, which at the opening field is
-	# 11 px, so there 北斗 does not get drawn. They are one switch apart all the same:
-	# the nine are the card's 星宿 layer (see DIPPER_STARS), the asterism is not.
-	if _mansions_shown:
-		for entry in _dipper_names:
-			_place(entry, placed, basis, DIPPER_STAR_SIZE, DIPPER_STAR_COLOUR,
-					float(entry.get("lift", DIPPER_STAR_LIFT)))
-	if _dipper != null:
-		_place({"name": DIPPER_NAME, "direction": _dipper}, placed, basis,
-				DIPPER_SIZE, DIPPER_COLOUR, DIPPER_LIFT)
+	# 北斗九星 (see DIPPER_STARS): one name per star, and the card's 星宿 switch picks
+	# which of the two sets it is - the 星名 while it is off, the 神名 while it is on.
+	for entry: Dictionary in _dipper_names:
+		_place({"name": entry["god"] if _mansions_shown else entry["name"],
+				"direction": entry["direction"]}, placed, basis, DIPPER_STAR_SIZE,
+				DIPPER_STAR_COLOUR, float(entry.get("lift", DIPPER_STAR_LIFT)))
 	if _moon != null:
 		_place({"name": MOON_NAME, "direction": _moon}, placed, basis, MOON_SIZE,
 				MOON_COLOUR, _moon_lift())
 	for entry in _planets:
 		_place(entry, placed, basis, PLANET_SIZE, PLANET_COLOUR, PLANET_LIFT)
-	# the 宿 and their 星官 are the card's 星宿 switch, both halves of it: the names of
-	# the divisions and the names of the star groups inside them are the same layer of
-	# reading, and the switch that takes the ribbons takes them
+	# the 宿, their 星官 and the 廿四节气 are the card's 星宿 switch between them: the
+	# names of the divisions and the names of the star groups inside them are the same
+	# layer of reading, and the switch that takes the ribbons takes them. The 宿's name
+	# comes first (it is what has to stay readable), the ecliptic's terms next, the 星官
+	# names of the 宿 after both
 	for entry in _mansions if _mansions_shown else []:
 		_place(entry, placed, basis, MANSION_SIZE, MANSION_COLOUR, MANSION_LIFT)
+	for entry in _terms if _mansions_shown else []:
+		_place(entry, placed, basis, TERM_SIZE, TERM_COLOUR, TERM_LIFT)
 	# the 星官 names come after the 宿's own scale (a 宿's name is what has to stay
 	# readable) and before the 88, which are the most plentiful layer here and the one
 	# that makes way for both

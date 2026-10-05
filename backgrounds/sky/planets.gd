@@ -33,6 +33,12 @@ const DRAWABLE := [
 	["天王星", 6], ["海王星", 7],
 ]
 
+## The 五行星 by the names DRAWABLE writes them under: the five the HUD's dial marks
+## (2026-10-14, 用户: "日月金木水火土星保留...五行星用五行色点"). The other two are
+## drawn on the sky's own layer - they have no 五行 to be coloured by, which is why
+## they take the palette's cool inks (COLOURS) - and the card is read as 日+月+五星.
+const FIVE_STARS := ["水星", "金星", "火星", "木星", "土星"]
+
 ## JPL's approximate elements, per row (Standish & Williams, "Approximate Positions
 ## of the Planets", Table 1): semi-major axis (AU), eccentricity, inclination, mean
 ## longitude, longitude of perihelion and longitude of the ascending node - all
@@ -434,3 +440,4 @@ func _apply_trail() -> void:
 		return
 	_trail.material_override.set_shader_parameter("night", _night)
 	_trail.material_override.set_shader_parameter("size_scale", _zoom)
+

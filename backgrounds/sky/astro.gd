@@ -58,6 +58,12 @@ static func unix_from_julian_day(jd: float) -> float:
 
 # -------------------------------------------------------------- sidereal time
 
+## One turn of the sky, in seconds: a mean sidereal day, and `gmst_deg`'s rate below
+## read backwards (86400 x 360 / 360.98564736629 = 86164.0905 s). It is what a step of a
+## 日 or more is measured modulo - whole turns of the sky are not worth *gliding*, the
+## remainder is (TimeCore's own stepper, `SkyTimeBar._step`).
+const SIDEREAL_DAY := 86164.0905
+
 ## Greenwich mean sidereal time in degrees (计划 §6.2). U.T. in, 0.1 s of arc of
 ## the polynomial's own accuracy - it reproduces Meeus' worked example 12.a to
 ## 2e-5 s (.tmp/tests/sky_probe.gd).

@@ -1,16 +1,19 @@
-## The sky's map to the frame, on the CPU side (2026-10-10).
+## The sky's map to the frame, on the CPU side (2026-10-10; the fisheye since
+## 2026-10-14).
 ##
-## The shader half of this is shaders/sky_projection.gdshaderinc, and it is where
-## the reasoning lives: the sky is a sphere seen from its centre, an engine camera is
-## a rectilinear lens, and through that lens what is off the view axis is magnified
-## by sec^2 - the frame's sides come out at 58 px per degree where the middle of the
-## frame is drawn at 10.6, so the Moon's disc grew as it drifted to the side and the
-## stars spread apart with it. Every vertex of the sky is therefore placed by
-## direction on the rig's own two axes: the frame's x is the angle about the frame's
-## up axis and its y the angle about its right axis, each at one constant scale. The
-## vertical scale is exact at every point of the frame, and so is the whole
-## horizontal band through the middle - the band the horizon lies in - so nothing
-## grows for standing away from the middle of the picture.
+## The shader half of this is shaders/sky_projection.gdshaderinc, and it is where the
+## reasoning lives: the sky is a sphere seen from its centre, an engine camera is a
+## rectilinear lens, and through that lens what is off the view axis is magnified by
+## sec^2 - the frame's sides came out at 58 px per degree where the middle of the frame
+## was drawn at 10.6, so the Moon's disc grew as it drifted to the side and the stars
+## spread apart with it (2026-10-10 "星星近大远小"; again 2026-10-14: "当前中心正常，
+## 周围被拉伸放大"). Two and a half days of drawing the sky with a *grid* instead
+## (pan, cylinder, the ball) bought the scale back and paid for it in a horizon that is
+## a curve; what the sky is drawn with now is the fisheye - the azimuthal equidistant a
+## dome master is drawn with, its pole on the view axis - so a degree of sky is a degree
+## of pixel in *every* direction radially, what is off the middle of the frame is drawn
+## smaller rather than larger, and both of 用户's two motions come out right: a turn
+## swings the sky rigidly about the zenith, and the day wheels it about the pole.
 ##
 ## Three things about the sky are 2D and computed here rather than by the engine, and
 ## they have to land on the same pixels the shader draws the sphere on:
@@ -37,46 +40,35 @@ const REACH := 600.0
 ## bodies' boxes are placed here while the sphere is drawn there. Set once, when the
 ## background is built (--sky-map).
 ##
-## The default is the camera's own lens (用户 2026-10-12: "要真 3D 投射啊"): the sky is a
-## real sphere with the stars on it and a plain Camera3D stands at its centre, so what
-## the frame shows is what the engine's own transform draws - no map at all, and the
-## only one of the four that is not a grid invented for the picture. The three grids
-## beside it were measured against it and kept, so the trade can be looked at rather
-## than argued about (the table at the head of the include).
-enum Map { PAN, LENS, CYLINDER, SPHERE }
-static var map: Map = Map.LENS
-
-
-## The row the composition wants the horizon on, as a fraction of the frame's height:
-## the pan-and-tilt grid's own - the view axis 45 deg up and the field 100 deg put it
-## there - and the ball's grid is scaled to land on the same row (its zenith is the
-## centre of its own grid, so it sits a little above the frame's top edge).
-const HORIZON_ROW := 0.95
-
-## How far the horizon's circle stands from the zenith's point, in frame heights - the
-## one knob between "a real camera" (infinite: the horizon a straight line, the sky
-## swelling at the sides) and "the sky on a ball" (small: the horizon a circle about
-## the zenith). At 1.39 the zenith's point sits 0.44 of a frame *above* the top edge -
-## "屏高正上方为天顶" - the horizon lands on the composition's own row and its whole
-## circle is in the frame, so turning in azimuth walks the sky round that circle the way
-## it walks round the zenith in life.
-const SPHERE_REACH := 1.39
+## The default is the fisheye (用户 2026-10-14: "改用鱼眼/等距柱状投影 重新校正星空"): the
+## sky is a real sphere with the stars pinned to it and a plain Camera3D at its centre,
+## and every vertex is placed by its *angle* off the view axis, folded onto the frame's
+## radius at one constant scale - the dome master's projection. What it buys is that a
+## turn of the view is a rigid rotation of the picture about the zenith and that a day
+## wheels it about the pole with the sky holding its shape; what it costs is that a line
+## of the sky that is not through the view axis - the horizon, when the view is not the
+## zenith - comes out a curve. The other three were measured against it and kept as
+## switches (the table at the head of the include), and the camera's own lens is among
+## them: 用户 2026-10-12 asked for it ("要真 3D 投射啊"), 2026-10-14 named its price.
+enum Map { PAN, LENS, CYLINDER, FISHEYE }
+static var map: Map = Map.FISHEYE
 
 
 ## The field each map is composed for, in degrees, for a caller that has just switched to
-## it (CameraRig.OPENING_FOV is the lens' own: 110, 用户's figure for this view). The pan
-## grid and the cylinder put the *angle* on the frame, so their horizontal edge is
-## `fov/2 * aspect` of azimuth - 100 deg of field is 178 deg of horizon, i.e. the whole
-## southern half, and anything wider wraps the sky behind the observer in at the frame's
-## sides. The ball's grid ignores the field entirely: its frame is its own.
+## it - and the field the wallpaper *runs* at, because build() hands the rig this number
+## (sky.gd::_build_clock). The fisheye is composed at the rig's own opening field (96:
+## a directed window onto the southern sky, the zenith on the frame's own top edge and the
+## ground under the horizon clearing the desktop's taskbar by a 地支 mark - both ends of the
+## frame are set by that pair, see CameraRig.OPENING_ALTITUDE); the pan grid and the
+## cylinder put the *angle* on the frame with a wider horizontal edge, so they open at 100;
+## and the camera's own lens is composed at the same field as the fisheye so the two can be
+## flipped between and compared.
 static func preferred_fov() -> float:
 	match map:
-		Map.LENS:
-			return 110.0
-		Map.SPHERE:
-			return 110.0
-		_:
+		Map.PAN, Map.CYLINDER:
 			return 100.0
+		_:
+			return CameraRig.OPENING_FOV
 
 
 ## Half the frame's vertical field, in radians: a point this far off the view axis
@@ -106,9 +98,8 @@ static func screen_point(camera: Camera3D, world: Vector3, size: Vector2) -> Vec
 	if map == Map.CYLINDER:
 		return _cylinder_point(camera, (world - camera.global_position).normalized(),
 				size)
-	if map == Map.SPHERE:
-		return _sphere_point(camera, (world - camera.global_position).normalized(),
-				size)
+	if map == Map.FISHEYE:
+		return _fisheye_point(camera, direction, size)
 	var half := half_angle(camera)
 	# the two angles of the direction in the camera's own frame (it looks down -Z),
 	# each over the half-angle the frame's edge stands for - the same map the shader
@@ -142,24 +133,35 @@ static func _cylinder_point(camera: Camera3D, direction: Vector3, size: Vector2)
 			size.y * 0.5 - (altitude - _pitch(camera)) * scale)
 
 
-## The sky on a ball (用户 2026-10-12: "你做个真正的天球,把星投射到球上" / "使用天球模式"):
-## the azimuthal equidistant a dome master is drawn with - a degree of sky is a degree of
-## pixel in *every* direction, radially, so turning the view swings the sky rigidly about
-## the zenith's point - with that point placed above the frame's top edge rather than on
-## it, so the horizon's whole circle is in the picture and the day is spent swinging over
-## it. Inside the circle is the sky, outside it the ground, and the frame is filled by
-## the two.
+## The fisheye (用户 2026-10-14: "改用鱼眼/等距柱状投影 重新校正星空"): the azimuthal
+## equidistant a dome master is drawn with, its pole on the *view axis* - the angle a
+## direction stands off that axis, at one constant scale, laid out as the frame's radius
+## in the direction the direction lies. A degree of sky is a degree of pixel radially, in
+## every direction, so nothing grows for standing away from the middle of the picture:
+## the pixels per degree are the same at the frame's edge as at its centre.
 ##
-## The cost of smallness is the horizon's curvature (SPHERE_REACH): at an infinite reach
-## this is the camera's own lens, with a straight horizon and the sides swelling.
-static func _sphere_point(camera: Camera3D, direction: Vector3, size: Vector2) -> Vector2:
-	var altitude := asin(clampf(direction.y, -1.0, 1.0))
-	var reach := SPHERE_REACH * size.y
-	var scale := reach / (PI * 0.5)
-	var centre := size.y * HORIZON_ROW - reach
-	var radius := scale * (PI * 0.5 - altitude)
-	var turn := _turn(camera, direction)
-	return Vector2(size.x * 0.5 + radius * sin(turn), centre + radius * cos(turn))
+## Three of the properties the two of 用户's motions are read off come out of that one
+## line. A turn of the view by `a` degrees turns the *picture* by exactly `a` about the
+## point the view axis lands on - the zenith's own point, when the view is up - because a
+## rotation about that axis is a relabelling of the polar angle alone: the sky's shape,
+## and with it every star separation, is untouched. The day wheels the sky about the pole
+## with the local scale field standing still (the pole is a point of the frame, 50.1 deg
+## out from the zenith at Beijing's latitude). And what is *tangential* - the direction
+## around the ring at a given angle - is stretched by `rho/sin rho`, 1.00 at the middle
+## and 1.57 at the horizon's ring, where the lens had 9.5 at its own corners; a line of
+## the sky that is not through the pole (the horizon, once the view is not the zenith)
+## is drawn as the curve that stretch makes of it.
+##
+## `direction` comes in in the camera's own frame (the caller's `view`, normalised), which
+## is where the pole is: the camera looks down -Z, so the angle off the axis is the
+## arccosine of -z and the azimuth about it is atan2(x, y) - the frame's own up being the
+## fisheye's own "north". The shader draws the same two angles (sky_projection.gdshaderinc,
+## mode 3).
+static func _fisheye_point(camera: Camera3D, direction: Vector3, size: Vector2) -> Vector2:
+	var off_axis := acos(clampf(-direction.z, -1.0, 1.0))
+	var roll := atan2(direction.x, direction.y)
+	var radius := off_axis / half_angle(camera) * size.y * 0.5
+	return size * 0.5 + Vector2(sin(roll), -cos(roll)) * radius
 
 
 ## How far round the world's up a direction lies from the view's own azimuth: the two
@@ -200,16 +202,29 @@ static func pixels_per_unit(camera: Camera3D, size: Vector2, radius: float) -> f
 
 
 ## Pixels one radian of sky covers at the middle of the frame under the map in use: the
-## camera's own scale away from the axis (the lens), the one-degree-a-degree of the
-## ball's grid, or the same over the half-angle the other two grids are drawn on. Only
-## the Moon's name lift rides on this.
+## camera's own scale away from the axis (the lens), or the one degree a degree of the
+## grids - the fisheye and the two angle-on-the-frame grids all put the angle on the
+## frame at `half_angle` for the frame's half-height. Only the Moon's name lift rides on
+## this.
 static func pixels_per_radian(camera: Camera3D, size: Vector2) -> float:
 	var half := half_angle(camera)
 	if map == Map.LENS:
 		return size.y * 0.5 / tan(half)
-	if map == Map.SPHERE:
-		return SPHERE_REACH * size.y / (PI * 0.5)
 	return size.y * 0.5 / half
+
+
+## The angular width the frame's middle row spans, in degrees, under the map in use: what
+## the wallpaper is *showing*, which is what the card's view arc is drawn as (用户
+## 2026-10-12 第二十一轮: "盘外的视角方向弧...跟实际3D场景中的视角一致"). The fisheye, the
+## pan grid and the cylinder put the angle on the frame, so it is `2 * half * aspect`; the
+## lens compresses it to `2 atan(tan(half) * aspect)`, which is a different number for the
+## same frame - 195.6 deg against 177.8 at the opening.
+static func frame_span(camera: Camera3D, size: Vector2) -> float:
+	var half := half_angle(camera)
+	var aspect := size.x / maxf(size.y, 1.0e-6)
+	if map == Map.LENS:
+		return rad_to_deg(2.0 * atan(tan(half) * aspect))
+	return rad_to_deg(2.0 * half * aspect)
 
 
 ## Gives `instance` bounds that hold the camera, so the frustum never culls it while

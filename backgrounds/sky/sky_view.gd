@@ -6,10 +6,11 @@
 ## SphereMesh, one Camera3D, nothing else - and underneath it is the wallpaper's own code:
 ## StarField pins the catalogue's 9096 stars to *this* mesh, dome.gdshader paints the
 ## sphere those stars are on (sky above its horizon, ground below), SkySun hangs off it,
-## and Astro.sky_basis turns it to the instant. There is no map between the two halves:
-## the camera's own lens does the projection, which is SkyProjection.Map.LENS - the
-## engine's own transform - so what this draws is what a plain 3D camera in front of a
-## sphere draws.
+## and Astro.sky_basis turns it to the instant. The map is the wallpaper's own too -
+## `--sky-map`, the fisheye by default, registered as the same global shader parameter -
+## so what this draws is the sphere the wallpaper's names and rings are placed on, and the
+## two halves can be held against each other on one frame. `--sky-map=lens` puts the
+## engine's own projection back: that is what a plain 3D camera in front of a sphere draws.
 ##
 ##   "$G" --path . res://backgrounds/sky/sky_view.tscn \
 ##       -- --shot=.tmp/shots/sky_view.png --sky-time=2026-03-20T04:00:00 --sky-view=180,45
@@ -32,7 +33,7 @@ const SHOT_FRAMES := 8
 
 var _stars: MeshInstance3D
 var _sun: SkySun
-var _view := Vector2(180.0, 45.0)
+var _view := Vector2(180.0, CameraRig.OPENING_ALTITUDE)
 var _fov := CameraRig.OPENING_FOV
 
 
@@ -77,16 +78,16 @@ static var _map_registered := false
 
 
 func _choose_map(opts: Args) -> void:
-	var chosen := SkyProjection.Map.LENS
-	match opts.text("sky_map", "lens"):
+	var chosen := SkyProjection.Map.FISHEYE
+	match opts.text("sky_map", "fisheye"):
+		"fisheye":
+			chosen = SkyProjection.Map.FISHEYE
 		"lens":
 			chosen = SkyProjection.Map.LENS
 		"cylinder":
 			chosen = SkyProjection.Map.CYLINDER
 		"pan":
 			chosen = SkyProjection.Map.PAN
-		"sphere":
-			chosen = SkyProjection.Map.SPHERE
 	SkyProjection.map = chosen
 	if not _map_registered:
 		RenderingServer.global_shader_parameter_add(SkyBackground.MAP_PARAMETER,

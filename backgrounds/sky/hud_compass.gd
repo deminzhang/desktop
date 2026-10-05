@@ -23,13 +23,24 @@
 ##
 ## and the middle is a 太极 in place of a bearing readout.
 ##
-## The tick ring is the card's own clock: 12 大 x 5 小, and the card carries that
-## clock's hand - one 6 deg step per second of sky time (`TimeCore.changed`), its
-## tip landing on the 小刻 it reads. Over the same band runs the 二十八宿's own
-## scale (S6): one mark per 宿, on the bearing its opening stands on at the instant,
-## told from the clock's marks by colour and length. The 驿马 stirs on the same
+## When the 时辰 turns, the chart it is cast for turns with it, and the card's characters
+## **fly** to their new places rather than the whole plate being redrawn (2026-10-13,
+## 换字飞转): a name that stands where it stood does not move, the next slot or two is
+## walked round the card (同心转), anything further crosses in a straight line with a
+## small rise (直线飞), and a name the new chart has no place for fades out where it was
+## while a new one is born in. That is what `_plate` / `_fly` / `_retarget` are, and why
+## the two charts are one list of characters keyed by name instead of two sets of draw
+## calls.
+##
+## The tick ring is the card's own clock and the card's only scale: 12 大 x 5 小, and
+## the card carries that clock's hand - one 6 deg step per second of sky time
+## (`TimeCore.changed`), its tip landing on the 小刻 it reads. The 二十八宿's own marks
+## ran over the same band until 2026-10-14 (用户: "HUD里的分野刻度去掉,只留时钟刻度") and
+## are gone from the card: the 宿 are the sky's own scale (its equator carries both the
+## 分野 names and their 距星 marks), and a second division laid over the clock's own band
+## only made the clock harder to read. The 驿马 stirs on the same
 ## beat. The card stands still, so every ring on it stands still with it; what
-## moves is the sky's own doing (the hand, the 宿, the 驿马, the Sun, the Moon and
+## moves is the sky's own doing (the hand, the 驿马, the Sun, the Moon and
 ## the planets) and the view arc, which is the camera's.
 ##
 ## The 卦 ring draws its eight trigrams as bars rather than as the ☰ U+2630..☷
@@ -115,10 +126,6 @@ const ROTATE_INSET := 16.0
 ## its base sits a px off the rim and its tip ends 9 px out - just inside the 12 px
 ## the window leaves, with the view arc's own band crossing the middle of it.
 const DIR_MARK := 5.0
-## The 二十八宿's own scale (S6), over the degree ring's band: told from the clock's
-## 60 小刻 and 12 大刻 by its colour and its reach, which is between theirs.
-const R_MANSION_IN := 119.0
-const R_MANSION_OUT := 127.0
 const R_LIUREN := 106.0
 ## The 驿马's own ring (2026-10-09 第十二轮: 块往里收，给马留出一圈): outside the 宫
 ## blocks and inside the 大六壬 ring, at r 92 - the four branches the horse rides
@@ -165,6 +172,28 @@ const HAND_STEM := 112.0
 const TWITCH_SEC := 0.35
 const TWITCH_PX := 3.0
 const TWITCH_HZ := 5.0
+## 换字飞转 (2026-10-13, 计划 §6.5 换字飞转): when a 时辰 turns the chart over, the
+## characters that stand somewhere else go to it - **同心转** round the card while it is
+## the next slot or two, **直线飞** straight across with a small rise when it is further,
+## and a character the new chart has no name for (or has one the old chart did not) is
+## born or dies in place. A character that stands where it stood does not move at all.
+## The three tuning numbers are lingwang's (`compass_3d.gd`, the 3D dial this card was
+## ported from); FLY_LIFT is in px here, where that dial lifted its characters in world
+## units.
+const FLY_TIME := 0.42       ## 飞转时长(秒)
+## 位次差 ≤ 这个值 × 本环扇宽 → 同心转，否则直线飞. 2.25 而不是 lingwang 的 1.25: 奇门的
+## 星/门/神 一个时辰走**两宫**(90 度, 值符随时干那次实测), 1.25 会让整盘 24 行每次都横穿
+## 盘面; 两格以内绕着转才像"盘在转"(实测那一档: 环上 12 字同心转、24 行里 16 行同心转、
+## 其余 8 行跨 3 宫以上走直线飞).
+const FLY_ARC_SLOT := 2.25
+const FLY_LIFT := 6.0        ## 直线飞中途抬起的高度(px)
+const BORN_SCALE := 0.35     ## 新生/消失的字起止时的大小
+## What a character in flight is doing (`_fly`): sweep its bearing round the card, fly
+## straight, or be born in place. A character the new chart has no name for is not in
+## `_fly` at all - it is one of `_fading`, which only ever fades out.
+const FLY_ARC := 0
+const FLY_STRAIGHT := 1
+const FLY_IN := 2
 ## The 太极 is the card's own centre mark and 2/3 of the 26 px it was: the 卦 ring
 ## closes in behind it and the three chart rings stay where they are.
 const TAIJI_R := 17.3
@@ -176,14 +205,14 @@ const TRIGRAM_H := 2.0
 const TRIGRAM_PITCH := 4.5
 const TRIGRAM_GAP := 4.5
 
-const C_DISC := Color(0.012, 0.035, 0.052, 0.72)
+## The card's own plate (用户 2026-10-13: "HUD背景太黑了,透一点"): 0.72 → 0.55. The
+## ink, the rings and the chips are unchanged - this is only how much of the sky the
+## plate lets through, which is what makes the card read as a card rather than a hole.
+const C_DISC := Color(0.012, 0.035, 0.052, 0.55)
 const C_RIM := Color(0.30, 0.72, 0.82, 0.42)
 const C_RING := Color(0.30, 0.72, 0.82, 0.20)
 const C_TICK := Color(0.44, 0.63, 0.70, 0.55)
 const C_TICK_MAJOR := Color(0.66, 0.86, 0.94, 0.85)
-## 二十八宿: the warm ink the sky writes the 宿 in, so the two scales read as one
-## system across the wallpaper and the card.
-const C_MANSION := Color(0.92, 0.78, 0.52, 0.62)
 const C_BAGUA := Color(0.88, 0.96, 0.99, 0.90)
 const C_STAR := Color(0.72, 0.84, 0.92, 0.86)
 const C_DOOR := Color(0.62, 0.80, 0.90, 0.86)
@@ -262,16 +291,29 @@ var _kong: Array = []
 ## (`QiMen.ju_name`), and which four 宫 are 内盘 follows from it. 0 before a chart
 ## arrives, which is also when the 八分盘 is not drawn at all.
 var _ju := 0
-## The 二十八宿's openings as bearings, handed over by the sky on every time step:
-## [{at: Vector2(altitude, azimuth)}], index = 角..轸. Empty until it arrives, which
-## is also when the scale is not drawn at all.
-var _mansions: Array = []
 ## Seconds since the last beat, and so how far into its twitch the 马 is; at
 ## TWITCH_SEC and past it the mark is at rest and nothing asks for a redraw.
 var _twitch := TWITCH_SEC
 ## The last real second the card was drawn at: `_process` asks for a frame when it
 ## turns, which is what keeps the hands moving while the sky stands still.
 var _ticked := -1
+## The card's characters as one list (换字飞转, 2026-10-13): one entry per mark that can
+## move when the 时辰 turns - a key to match two charts' names by, the bearing / radius /
+## row offset it stands on, and how to draw it once it is there (`_build_plate`). Rebuilt
+## by `set_chart`, which the sky calls on each 时辰 turn and once more after the HUD is
+## built (for the chart cast before it existed).
+var _plate: Array = []
+## key -> how that character gets to its new place (see `_retarget`); empty means the card
+## stands still, which is the state the wallpaper's ON_DEMAND policy wants it in.
+var _fly: Dictionary = {}
+## The characters the new chart has no name for: they keep the place they stood on while
+## they fade out, for as long as the fly lasts.
+var _fading: Array = []
+## 0..1 through the fly; 1 = standing.
+var _fly_t := 1.0
+## Whether any chart has been drawn yet: the first one lands without flying in, there
+## being no card to fly from.
+var _plate_built := false
 
 
 # --------------------------------------------------------------------- setup
@@ -308,16 +350,102 @@ func _process(delta: float) -> void:
 	if second != _ticked:
 		_ticked = second
 		queue_redraw()
+	if _fly_t < 1.0:
+		_step_fly(delta)
 	if _twitch >= TWITCH_SEC:
 		return
 	_twitch = minf(_twitch + delta, TWITCH_SEC)
 	queue_redraw()
 
 
+## One frame of the fly, FLY_TIME long. The card asks for these frames itself, the way it
+## does for the twitch: the card has the HUD window to itself, so a frame it draws costs
+## the wallpaper nothing - which is why this needs none of lingwang's `anim_started` /
+## `anim_finished` (that dial shared a scene with the sky it had to keep redrawing).
+func _step_fly(delta: float) -> void:
+	_fly_t = minf(_fly_t + delta / FLY_TIME, 1.0)
+	if _fly_t >= 1.0:
+		# the new chart's own places are exactly where the fly ends, mode by mode (see
+		# `_entry_now`), so dropping the fly here moves nothing - the card just stops
+		# asking for frames again
+		_fly.clear()
+		_fading.clear()
+	queue_redraw()
+
+
+## Cubic ease-out, the curve lingwang's fly runs on (`Tween.TRANS_CUBIC`/`EASE_OUT`): most
+## of a character's move happens in the first half of FLY_TIME.
+func _eased() -> float:
+	return 1.0 - pow(1.0 - _fly_t, 3.0)
+
+
+## A new chart has arrived: work out where each of its characters comes from. What a turn
+## animates is a move from the place the character is drawn at *now* - the fly's own
+## progress included, so two turns in a row fly from where the card is, not from where the
+## first one started - to the place the new chart gives it (`_build_plate` keys the two
+## charts' names together). A name the new chart has no place for fades out where it
+## stands; a name the old chart did not have is born in. A chart handed over twice with
+## nothing changed (the sky only pushes on a turn now, but the card does not depend on
+## that) leaves `_fly` empty and the card standing still.
+func _retarget() -> void:
+	var was := {}
+	for entry in _snapshot():
+		was[String(entry["key"])] = entry
+	var next := _build_plate()
+	var fly := {}
+	var fading: Array = []
+	if _plate_built:
+		var settled := {}
+		for entry in next:
+			var key := String(entry["key"])
+			settled[key] = true
+			var old: Dictionary = was.get(key, {})
+			if old.is_empty():
+				fly[key] = {"mode": FLY_IN}
+				continue
+			# 同位不动: a character the new chart keeps in the slot it is already in - the
+			# common case, since most of a plate does stand still between two 时辰
+			var delta := wrapf(float(entry["a"]) - float(old["a"]), -180.0, 180.0)
+			if absf(delta) < 0.01 and (old["at"] as Vector2) == (entry["at"] as Vector2):
+				continue
+			var arc := absf(delta) <= float(entry["cell"]) * FLY_ARC_SLOT
+			fly[key] = {"mode": FLY_ARC if arc else FLY_STRAIGHT,
+					"a0": float(old["a"]), "at0": old["at"]}
+		for entry in was.values():
+			if not settled.has(String(entry["key"])):
+				fading.append(entry)
+	_plate = next
+	_fading = fading
+	_fly = fly
+	_fly_t = 1.0 if fly.is_empty() else 0.0
+	if fly.is_empty():
+		# nothing to fly: whoever drew the plate last may be waiting on `_fly_t` to come
+		# back - `_step_fly` never runs when it starts at 1
+		_fading.clear()
+	_plate_built = true
+
+
+## The plate as it stands on the screen right now - each entry at whatever the fly has it
+## at, plus the ones already fading out. This is the "from" side `_retarget` matches the
+## new chart against.
+func _snapshot() -> Array:
+	var out: Array = []
+	for entry in _plate:
+		var now := _entry_now(entry)
+		var shown: Dictionary = entry.duplicate()
+		shown["a"] = rad_to_deg(float(now["angle"]))
+		shown["at"] = now["at"]
+		out.append(shown)
+	for entry in _fading:
+		out.append(entry)
+	return out
+
+
 ## The charts the card is drawn from, handed over by the sky whenever the 时辰
 ## turns: `pan` is `QiMen.pan()`'s palaces, `liuren` is `LiuRen.pan()`'s slots, and
 ## `kong` the 奇门 旬空's two 支 (the 神盘 writes a 〇 before the 神 of the palace
-## they fall in).
+## they fall in). Handing a chart over is also what starts the 换字飞转: the new plate is
+## matched against the one on the card (`_retarget`).
 func set_chart(pan: Array, liuren: Array, horse := -1, kong: Array = []) -> void:
 	_palaces = pan
 	_slots = liuren
@@ -327,6 +455,7 @@ func set_chart(pan: Array, liuren: Array, horse := -1, kong: Array = []) -> void
 		var index := Branches.NAMES.find(String(branch))
 		if index >= 0 and not _kong.has(kong_slot(index)):
 			_kong.append(kong_slot(index))
+	_retarget()
 	_refresh()
 
 
@@ -349,17 +478,13 @@ static func kong_slot(branch: int) -> int:
 ## The bodies the dial marks, handed over by the sky on every time step
 ## (`SkyBackground._bodies`): Vector2(altitude, azimuth) each, the same pair
 ## `Astro.altaz()` reports. They move with the clock, not with the 时辰, so they are
-## set outside set_chart(). `planets` is one {at, colour, norm} per planet, `norm`
-## the magnitude ramp `SkyPlanets.mark_norm` gives (0 faint, 1 bright).
+## set outside set_chart(). `planets` is one {at, colour, norm} for each of the sky's
+## **五星** (2026-10-14 用户: "日月金木水火土星保留,月用月牙图标,五行星用五行色点" -
+## the card carries the Sun, the Moon as a crescent and the five planets as points of
+## their own 五行 colour; 天王/海王 are on the sky's own layer, not here), `norm` the
+## magnitude ramp `SkyPlanets.mark_norm` gives (0 faint, 1 bright).
 func set_bodies(sun: Vector2, moon: Vector2, planets: Array = []) -> void:
 	_bodies = {"sun": sun, "moon": moon, "planets": planets}
-	_refresh()
-
-
-## The 二十八宿's openings, handed over by the sky with the bodies: one
-## {at: Vector2(altitude, azimuth)} per 宿, in 角..轸 order.
-func set_mansions(entries: Array) -> void:
-	_mansions = entries
 	_refresh()
 
 
@@ -453,6 +578,23 @@ static func out_of(bearing_deg: float) -> Vector2:
 	return Vector2(sin(angle), -cos(angle))
 
 
+## A point on the card: along `angle`'s own direction (already a dial offset, in radians)
+## out to `r`, then the entry's own screen offset - a 宫块's line stands a row above or
+## below the anchor of its 宫 (`off`), and a 大六壬 label stands on its slot's anchor.
+## 换字飞转 sweeps `angle` and leaves `off` alone, which is what keeps a block's three
+## lines a row apart while it carries them round the card.
+static func _place(angle: float, r: float, off: Vector2) -> Vector2:
+	return CENTRE + Vector2(sin(angle), -cos(angle)) * r + off
+
+
+## Which way round a label's own run lies on the card: along the tangent, except on the
+## lower half, where pointing it outwards would hang the name upside down - there it is
+## turned the other way round, so the five names from 120 to 240 deg still read left to
+## right (用户 2026-10-10 第十六轮: 下方5组字反着的，改成正过来方便读).
+static func _run_turn(angle: float) -> float:
+	return angle + PI if angle > PI * 0.5 and angle < PI * 1.5 else angle
+
+
 func _chip(text: String, font_size := 12) -> Button:
 	var button := Button.new()
 	button.text = text
@@ -509,17 +651,16 @@ func _draw() -> void:
 	draw_circle(CENTRE, R_DISC, C_DISC)
 	draw_arc(CENTRE, R_DISC, 0.0, TAU, 128, C_RIM, 1.2, true)
 	_draw_ticks()
-	_draw_mansions()
 	_draw_bodies()
 
 	# the 奇门's own eight blocks in the middle, the 大六壬 ring outside them - and the
-	# 八分盘 under both, which is what says which half of the chart is 内盘.
+	# 八分盘 under both, which is what says which half of the chart is 内盘. The blocks
+	# and the ring are one list of characters now (换字飞转), so they are drawn by
+	# `_draw_plate`; the 卦 ring is fixed and stays on its own.
 	_draw_panels()
-	_draw_layer(_bagua_layer(), 45.0)
-	_draw_palaces()
-	_draw_layer(_liuren_layer(), 30.0)
+	_draw_bagua_ring()
+	_draw_plate()
 
-	_draw_horse()
 	_draw_hands()
 	_draw_view_arc()
 	_draw_taiji()
@@ -541,28 +682,13 @@ func _draw_bodies() -> void:
 			_draw_sun(CENTRE + dir * R_SUN, Color(C_SUN, C_SUN.a * alpha))
 		else:
 			_draw_moon(CENTRE + dir * R_MOON, Color(C_MOON, C_MOON.a * alpha))
-	# the seven planets, in the Sun's own lane: a planet and the Sun can stand
+	# the five planets, in the Sun's own lane: a planet and the Sun can stand
 	# together on the card, and seeing that is the point of the mark (2026-10-09 行星指针)
 	for planet: Dictionary in _bodies.get("planets", []):
 		var at: Vector2 = planet["at"]
 		var dir := out_of(at.y)
 		var alpha := 1.0 if at.x > 0.0 else C_BELOW
 		_draw_planet(CENTRE + dir * R_SUN, planet["colour"], alpha, planet["norm"])
-
-
-## The 二十八宿's own scale: one mark per 宿 on the bearing its opening stands on at
-## this instant, the way the bodies are placed - an equatorial division is not a
-## fixed point of the horizon, so which way one faces turns with the hour. They run
-## across the degree ring's band and are told from the clock's marks by colour and
-## reach. A 宿 whose opening is under the horizon is dimmed rather than dropped, the
-## same reading the Sun and the Moon get.
-func _draw_mansions() -> void:
-	for entry in _mansions:
-		var at: Vector2 = entry["at"]
-		var dir := out_of(at.y)
-		var colour := C_MANSION if at.x > 0.0 else Color(C_MANSION, C_MANSION.a * C_BELOW)
-		draw_line(CENTRE + dir * R_MANSION_IN, CENTRE + dir * R_MANSION_OUT, colour,
-				1.2, true)
 
 
 ## One planet's mark: a plain disc in the planet's own colour, sized by the same
@@ -604,44 +730,20 @@ func _draw_ticks() -> void:
 		draw_line(CENTRE + dir * inner, CENTRE + dir * R_TICK_OUT, colour, width, true)
 
 
-## One ring: its radial slot lines, then its marks. An item is `[bearing, text]`,
-## written in the layer's own `colour`, or `[bearing, text, ink]` where `ink` gives a
-## colour per character - the 大六壬 ring writes its 贵人 red and its 月将's 支 gold
-## without either being a whole label. On a `"trigram"` layer the second field is
-## instead the 爻 mask and a bar glyph is drawn in place of the text. (The 奇门's own
-## names are not a ring any more: they are drawn per 宫 by `_draw_palaces`.) A layer
-## may ask for `"side_columns"`, which writes the names on the card's two exact sides
-## down the card as columns instead of along the tangent - that is the 大六壬 ring's
-## own choice.
-func _draw_layer(layer: Dictionary, cell: float) -> void:
-	var radius := float(layer["radius"])
-	var trigram: bool = String(layer.get("shape", "")) == "trigram"
-	for i in int(round(360.0 / cell)):
-		var dir := out_of(cell * 0.5 + cell * float(i))
-		draw_line(CENTRE + dir * (radius - ROW), CENTRE + dir * (radius + ROW),
-				C_RING, 1.0, true)
-	for item: Array in layer["items"]:
-		var angle := deg_to_rad(dial_offset_deg(float(item[0])))
-		var dir := Vector2(sin(angle), -cos(angle))
-		var at := CENTRE + dir * radius
-		if trigram:
-			_trigram(at, angle, int(item[1]), layer["colour"])
-		else:
-			var ink: Array = item[2] if item.size() > 2 else []
-			if bool(layer.get("side_columns", false)) \
-					and is_side(dial_offset_deg(float(item[0]))):
-				_upright_column(at, String(item[1]), 13, layer["colour"], ink)
-			else:
-				_radial_label(at, angle, String(item[1]), 13, layer["colour"], ink)
-
-
-## 环一: the eight palaces' trigrams, as their own glyphs - the ring the 奇门 chart
-## is cast on, so the 门 and 星 rings below it read straight out to their palace.
-func _bagua_layer() -> Dictionary:
-	var items: Array = []
+## 环一: the eight palaces' trigrams, as their own glyphs - the ring the 奇门 chart is
+## cast on, so the 门 and 星 blocks below it read straight out to their own palace. The
+## bars are the one ring on the card that is not characters (the 大六壬's names are plate
+## entries, `_build_plate`), so this is a function of its own rather than a layer
+## description - and it never moves, a trigram being fixed to its palace.
+func _draw_bagua_ring() -> void:
 	for i in BAGUA.size():
-		items.append([45.0 * float(i), int(BAGUA[i][2])])
-	return {"radius": R_BAGUA, "colour": C_BAGUA, "items": items, "shape": "trigram"}
+		var dir := out_of(22.5 + 45.0 * float(i))
+		draw_line(CENTRE + dir * (R_BAGUA - ROW), CENTRE + dir * (R_BAGUA + ROW),
+				C_RING, 1.0, true)
+	for i in BAGUA.size():
+		var angle := deg_to_rad(dial_offset_deg(45.0 * float(i)))
+		var dir := Vector2(sin(angle), -cos(angle))
+		_trigram(CENTRE + dir * R_BAGUA, angle, int(BAGUA[i][2]), C_BAGUA)
 
 
 ## The 八分盘: the disc's eight 45 deg sectors, one per 奇门 宫, standing under the 卦
@@ -672,26 +774,97 @@ func _draw_panels() -> void:
 		draw_colored_polygon(points, C_PANEL_INNER if inner else C_PANEL_OUTER)
 
 
-## The 奇门's eight 宫, each written as a block of three lines on its own bearing
-## (计划 §6.4, 2026-10-09 第十一轮): 神 over 星 over 门, each with the 干 that rides
-## with it. The lines are upright and run down the screen wherever the 宫 sits - the
-## chart's names are read, not followed round the dial - so the three rings that
-## used to carry them at three radii (门 inner, 神 outer) are gone, and what tells
-## one 宫 from the next is the bearing its block stands on, not a radius.
-func _draw_palaces() -> void:
-	for i in BAGUA.size():
-		var lines := _palace_block(i)
-		if lines.is_empty():
-			continue
-		var angle := deg_to_rad(dial_offset_deg(45.0 * float(i)))
-		var anchor := CENTRE + Vector2(sin(angle), -cos(angle)) * R_PALACE
-		for row in lines.size():
-			var line: Array = lines[row]
-			# centred on the anchor, so the block reads out from the 宫's own point
-			var at := Vector2(anchor.x, anchor.y
-					+ (float(row) - float(lines.size() - 1) * 0.5) * LINE_PITCH)
-			_upright_pair(at, String(line[0]), String(line[1]), line[2],
-					String(line[3]), line[4])
+## The plate: every character the chart turns over, each drawn where the fly has it
+## (换字飞转). The order is the card's own - the 奇门's 八宫块 first, then the 大六壬 ring's
+## slot lines over them, then its names, then the characters the new chart dropped, which
+## keep the place they stood on while they fade out.
+func _draw_plate() -> void:
+	for entry in _plate:
+		if String(entry["payload"]["kind"]) == "block":
+			_draw_entry(entry, _entry_now(entry))
+	for i in int(round(360.0 / 30.0)):
+		var dir := out_of(15.0 + 30.0 * float(i))
+		draw_line(CENTRE + dir * (R_LIUREN - ROW), CENTRE + dir * (R_LIUREN + ROW),
+				C_RING, 1.0, true)
+	for entry in _plate:
+		if String(entry["payload"]["kind"]) != "block":
+			_draw_entry(entry, _entry_now(entry))
+	var e := _eased()
+	for entry in _fading:
+		_draw_entry(entry, {"angle": deg_to_rad(float(entry["a"])), "at": entry["at"],
+				"alpha": 1.0 - e, "scale": lerpf(1.0, BORN_SCALE, e)})
+
+
+## One character of the plate, drawn where the fly has it: a 大六壬 slot's own run
+## (神 + 遁干 + 天盘支, along the card or down it on the two exact sides), one line of a
+## 奇门 宫's block, or the 驿马. A block line is upright and runs down the screen wherever
+## its 宫 sits - the chart's names are read, not followed round the dial - so it is drawn
+## from a canvas put on its own anchor, which is also what lets a line being born or dying
+## be scaled about itself.
+func _draw_entry(entry: Dictionary, now: Dictionary) -> void:
+	var payload: Dictionary = entry["payload"]
+	var at: Vector2 = now["at"]
+	var alpha := float(now["alpha"])
+	match String(payload["kind"]):
+		"ring":
+			if bool(payload["side"]):
+				_upright_column(at, String(payload["text"]), 13, C_ZHI, payload["ink"],
+						alpha, float(now["scale"]))
+			else:
+				_radial_label(at, float(now["angle"]), String(payload["text"]), 13,
+						C_ZHI, payload["ink"], alpha, float(now["scale"]))
+		"block":
+			var scale := float(now["scale"])
+			if is_equal_approx(scale, 1.0):
+				# 静止或飞行中的那一行(不缩放)直接给绝对锚点: 把画布搬到锚点上再画字,
+				# 字的边缘栅格化会挪一丁点 - 实测 24 行的墨各差 3..57 px, 而这份盘的
+				# 排法一个像素都不该动(2026-10-13, 出图 A/B 逮到的)
+				_upright_pair(at, String(payload["mark"]), String(payload["head"]),
+						payload["head_colour"], String(payload["tail"]),
+						payload["tail_colour"], alpha)
+			else:
+				draw_set_transform(at, 0.0, Vector2.ONE * scale)
+				_upright_pair(Vector2.ZERO, String(payload["mark"]),
+						String(payload["head"]), payload["head_colour"],
+						String(payload["tail"]), payload["tail_colour"], alpha)
+				draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		"horse":
+			# the 驿马 lands where the fly puts it and shivers on the clock's beat from
+			# there (TWITCH_*): one mark, the two motions one after the other
+			var dir := Vector2(sin(float(now["angle"])), -cos(float(now["angle"])))
+			var shiver := Vector2.ZERO
+			if _twitch < TWITCH_SEC:
+				var decay := 1.0 - _twitch / TWITCH_SEC
+				shiver = Vector2(-dir.y, dir.x) \
+						* sin(TAU * TWITCH_HZ * _twitch) * TWITCH_PX * decay
+			_upright_label(at + shiver, "马", 12, C_HORSE, alpha)
+
+
+## Where a plate entry is drawn **right now**: its own place while the card stands, and
+## the half-way value of its fly while one is running - the bearing swept round the card
+## (同心转), a straight line with a rise (直线飞), or the size and the solidity of a name
+## being born or dying (淡入/淡出). Every mode lands exactly on the entry's own place at
+## t = 1, which is what lets `_step_fly` drop the whole fly without the card jumping.
+func _entry_now(entry: Dictionary) -> Dictionary:
+	var angle := deg_to_rad(float(entry["a"]))
+	var at: Vector2 = entry["at"]
+	var alpha := 1.0
+	var scale := 1.0
+	var fly: Dictionary = _fly.get(String(entry["key"]), {})
+	if not fly.is_empty():
+		var e := _eased()
+		match int(fly["mode"]):
+			FLY_ARC:
+				var sweep := wrapf(float(entry["a"]) - float(fly["a0"]), -180.0, 180.0)
+				angle = deg_to_rad(float(fly["a0"]) + sweep * e)
+				at = _place(angle, float(entry["r"]), entry["off"])
+			FLY_STRAIGHT:
+				at = (fly["at0"] as Vector2).lerp(at, e) \
+						+ Vector2.UP * FLY_LIFT * sin(PI * e)
+			FLY_IN:
+				alpha = e
+				scale = lerpf(BORN_SCALE, 1.0, e)
+	return {"angle": angle, "at": at, "alpha": alpha, "scale": scale}
 
 
 ## One 宫's three lines, top to bottom: its 神 (with the 空亡's 〇 in the margin when
@@ -717,30 +890,82 @@ func _palace_block(index: int) -> Array:
 	return lines
 
 
-## 环四: the 大六壬 heaven plate - 贵人, 遁干 and the 天盘支 standing over each of
-## the twelve 地盘支, the sky's own 地支 running 子 from north. Each slot's name is
-## 神 + 遁干 + 支, written along the dial like every other ring name - except the two
-## on the card's exact sides, which stand upright as a column instead
-## (`side_columns`, 用户 2026-10-10 第十七轮). The two marks the plate is read for take
-## their own ink (`_slot_ink`): the 贵人's 神 red, the 月将's 支 gold - and which slot
-## is which is the chart's own answer (`LiuRen.pan`'s `guide` / `general`), the ring
-## working out nothing for itself (用户 2026-10-12: 月将支标用金色，贵人用红色).
-func _liuren_layer() -> Dictionary:
-	var items: Array = []
+## The card's characters as one list, which is what the fly matches two charts up by
+## (换字飞转, 2026-10-13): a key, the bearing / radius / own offset it stands on, and how
+## to draw it once it gets there. Two charts are compared through these keys, so a turn
+## reads as the characters moving rather than as the whole card being redrawn - and the
+## key is always what the chart itself says the character is, never a position.
+##
+## 奇门 八宫块: one entry per line (神 over 星 over 门, each with the 干 that rides with
+## it, 2026-10-09 第十一轮), keyed by that line's own name; the three lines of a 宫 stand
+## a row apart about the 宫's anchor (`off`), and each keeps its own row offset while it
+## flies.
+## 大六壬 环五: one entry per slot - 贵人, 遁干 and the 天盘支 standing over that 地盘支,
+## keyed by the whole label, because the three move together: measured on this sky, the
+## whole triple is one slot further on every 时辰 (`Branches.bearing(i)` is the slot's own
+## bearing and the label's 支/干 ride the 天盘, which turns a slot an hour). They come apart
+## only when the **day** turns (子时): the 贵人宫 is the day 干's own answer, so the twelve
+## 天将 then jump further than their 干支 do - and the whole-label key reads that as the
+## ring being recast, which is what it is (each label fades out where it stood and the new
+## one is born in, no match by text). The colours are the chart's own (`_slot_ink`; the two
+## slots on the card's exact sides are written down the card as columns instead, 用户
+## 2026-10-10 第十七轮).
+## 驿马: one entry, keyed by the mark itself - the horse the 时辰's 三合 sends to 寅 巳 申
+## 亥, on the 神盘's own radius (those four branches fall between the eight palace slots,
+## so it never lands on a ring label; it is the one mark that says where the chart is
+## travelling rather than what stands where, and it shivers sideways for TWITCH_SEC on
+## every beat, `_draw_entry`).
+## The 卦 ring is not here - a trigram never moves.
+func _build_plate() -> Array:
+	var plate: Array = []
+	for i in BAGUA.size():
+		var lines := _palace_block(i)
+		if lines.is_empty():
+			continue
+		var a := dial_offset_deg(45.0 * float(i))
+		for row in lines.size():
+			var line: Array = lines[row]
+			# centred on the 宫's anchor, so the block reads out from the 宫's own point
+			var off := Vector2(0.0,
+					(float(row) - float(lines.size() - 1) * 0.5) * LINE_PITCH)
+			plate.append({
+				"key": "block:%s" % line[1],
+				"cell": 45.0, "a": a, "r": R_PALACE, "off": off,
+				"at": _place(deg_to_rad(a), R_PALACE, off),
+				"payload": {
+					"kind": "block", "mark": String(line[0]),
+					"head": String(line[1]), "head_colour": line[2],
+					"tail": String(line[3]), "tail_colour": line[4],
+				},
+			})
 	for i in Branches.NAMES.size():
 		var slot: Dictionary = _slot(i)
 		if slot.is_empty():
 			continue
+		var bearing := dial_offset_deg(Branches.bearing(i))
 		var text := "%s%s%s" % [slot.get("god", ""), slot.get("stem", ""),
 				slot.get("branch", "")]
-		items.append([Branches.bearing(i), text, _slot_ink(slot)])
-	return {"radius": R_LIUREN, "colour": C_ZHI, "items": items, "side_columns": true}
+		plate.append({
+			"key": "ring:%s" % text,
+			"cell": 30.0, "a": bearing, "r": R_LIUREN, "off": Vector2.ZERO,
+			"at": _place(deg_to_rad(bearing), R_LIUREN, Vector2.ZERO),
+			"payload": {"kind": "ring", "text": text, "ink": _slot_ink(slot),
+				"side": is_side(bearing)},
+		})
+	if _horse >= 0 and _horse < Branches.NAMES.size():
+		var a := dial_offset_deg(Branches.bearing(_horse))
+		plate.append({
+			"key": "horse", "cell": 30.0, "a": a, "r": R_HORSE, "off": Vector2.ZERO,
+			"at": _place(deg_to_rad(a), R_HORSE, Vector2.ZERO),
+			"payload": {"kind": "horse"},
+		})
+	return plate
 
 
 ## One 大六壬 slot's label ink, character by character: 神 (the 贵人's own red on the
 ## slot it rides), 遁干 (the ring's own warm amber), 天盘支 (the card's 金 on the slot
 ## the 月将 was laid on). The three fields are one character each - 遁干 is a 干 or the
-## 空亡's 〇 - so the ink lines up with the label `_liuren_layer` writes.
+## 空亡's 〇 - so the ink lines up with the label `_build_plate` writes.
 func _slot_ink(slot: Dictionary) -> Array:
 	var fields := [[str(slot.get("god", "")),
 				C_GUIDE if bool(slot.get("guide", false)) else C_ZHI],
@@ -772,24 +997,6 @@ func _palace(number: int) -> Dictionary:
 
 func _slot(index: int) -> Dictionary:
 	return _slots[index] if index < _slots.size() and _slots[index] is Dictionary else {}
-
-
-## The 驿马 - the horse the 时辰's 三合 sends to 寅 巳 申 亥 - as a small 马 on the 神盘's
-## own radius. Those four branches fall between the eight palace slots, so the mark
-## never lands on a ring label; it is the one thing on the card that says where the
-## chart is travelling rather than what is standing where. It is written the right
-## way up (a mark to read, not a ring's name to follow round the dial) and shivers
-## sideways for TWITCH_SEC on every beat of the clock.
-func _draw_horse() -> void:
-	if _horse < 0 or _horse >= Branches.NAMES.size():
-		return
-	var angle := deg_to_rad(dial_offset_deg(Branches.bearing(_horse)))
-	var dir := Vector2(sin(angle), -cos(angle))
-	var at := CENTRE + dir * R_HORSE
-	if _twitch < TWITCH_SEC:
-		var decay := 1.0 - _twitch / TWITCH_SEC
-		at += Vector2(-dir.y, dir.x) * sin(TAU * TWITCH_HZ * _twitch) * TWITCH_PX * decay
-	_upright_label(at, "马", 12, C_HORSE)
 
 
 ## The observer's own wall clock, as Godot's datetime dictionary in their local
@@ -844,12 +1051,14 @@ func _draw_view_arc() -> void:
 
 
 ## How long the arc is: the horizontal field of view the wallpaper is actually
-## showing, in degrees of bearing. The rig holds a **vertical** fov (its `_apply`
-## writes `Camera3D.fov`, and the camera keeps its height), so the frame is as wide
-## as the aspect makes it: `2 atan(tan(fov/2) * aspect)`. A 16:9 wallpaper at the
-## opening fov of 100 therefore shows about 129 deg across - and that is what the
-## arc is drawn as, so the card says "this much of the sky is on screen" as well as
-## "on this bearing" (用户 2026-10-12 第二十一轮: 宽屏的弧就长点，窄屏就短点).
+## showing, in degrees of bearing. It is the *map's* own width, not the camera's
+## (SkyProjection.frame_span): the rig holds a vertical field (its `_apply` writes
+## `Camera3D.fov`, and the camera keeps its height) and the map decides what that comes
+## to across the frame - 170.7 deg for the fisheye at the opening field, 126.3 for the
+## camera's own lens, either way wider on a wider frame. A 16:9 wallpaper therefore
+## shows about 171 deg across - and that is what the arc is drawn as, so the card says
+## "this much of the sky is on screen" as well as "on this bearing" (用户 2026-10-12
+## 第二十一轮: 宽屏的弧就长点，窄屏就短点).
 ##
 ## It is a *bearing* span: the card is drawn in bearings, and the frame's own
 ## horizontal field is only the same thing along the horizon. Close enough for a
@@ -863,14 +1072,7 @@ func _view_arc_span() -> float:
 	var rect := camera.get_viewport().get_visible_rect().size
 	if rect.y <= 0.0:
 		return ARC_SPAN
-	return frame_span(rig.fov, rect.x / rect.y)
-
-
-## The horizontal field of view of a frame `aspect` wide holding a vertical field of
-## `fov_deg`: the arc's own length, as a static so it can be read (and checked)
-## without a camera, a window or a rig.
-static func frame_span(fov_deg: float, aspect: float) -> float:
-	return rad_to_deg(2.0 * atan(tan(deg_to_rad(fov_deg * 0.5)) * maxf(aspect, 0.0)))
+	return SkyProjection.frame_span(camera, rect)
 
 
 ## The 太极 in the middle of the card, where the bearing readout used to be: two
@@ -922,24 +1124,34 @@ static func is_side(dial_deg: float) -> bool:
 	return is_equal_approx(fposmod(dial_deg, 180.0), 90.0)
 
 
+## One em of the label font at `size`: what a CJK glyph advances, and so the pitch
+## every label written character by character is laid out at.
+func _em(size: int) -> float:
+	return _font.get_string_size("〇", HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+
+
 ## One name of the 大六壬 ring written **down the card as a column**: 神 over 干 over
 ## 支, every character the right way up and read downwards (用户 2026-10-10 第十七轮:
 ## 正左/正右两宫从上到下竖着正写 神/干/支). The three characters are the same ones the
 ## tangential label carries and in the same order - the ring's own name is only ever
-## 神 + 遁干 + 天盘支 (三字, see `_liuren_layer`) - and the column stands in the same
+## 神 + 遁干 + 天盘支 (三字, see `_build_plate`) - and the column stands in the same
 ## 13 x 39 px box the tangential label does at those two slots, so nothing else on
 ## the card moves. `ink` is the same per-character colour list the tangential label
 ## takes, so a column writes its 贵人 and its 月将支 in the same two inks the rest of
 ## the ring does.
 func _upright_column(at: Vector2, text: String, size: int, colour: Color,
-		ink: Array = []) -> void:
+		ink: Array = [], alpha := 1.0, scale := 1.0) -> void:
 	# a CJK glyph advances one em, which is the pitch the tangential label lays its
-	# characters out at too - the column ends up exactly as long as the row was
+	# characters out at too - the column ends up exactly as long as the row was. The
+	# canvas goes on the column's own centre, so a column being born or dying is scaled
+	# about itself and stays where it stands (2026-10-13, 换字飞转).
 	var pitch := _em(size)
-	var top := at.y - pitch * float(text.length() - 1) * 0.5
+	draw_set_transform(at, 0.0, Vector2(scale, scale))
+	var top := -pitch * float(text.length() - 1) * 0.5
 	for i in text.length():
-		_upright_label(Vector2(at.x, top + pitch * float(i)), text.substr(i, 1), size,
-				ink[i] if i < ink.size() else colour)
+		_upright_label(Vector2(0.0, top + pitch * float(i)), text.substr(i, 1), size,
+				ink[i] if i < ink.size() else colour, alpha)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 ## One pass of a label's characters, laid out from `at` towards the east: a single
@@ -949,23 +1161,19 @@ func _upright_column(at: Vector2, text: String, size: int, colour: Color,
 ## `draw_string` is handed, and the characters are pitched at one em - the advance a
 ## CJK glyph takes - so the coloured pass lands in the box the single one does.
 func _draw_run(at: Vector2, text: String, size: int, colour: Color,
-		ink: Array) -> void:
+		ink: Array, alpha := 1.0) -> void:
 	if ink.is_empty():
-		draw_string(_font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, size, colour)
+		draw_string(_font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, size,
+				Color(colour, colour.a * alpha))
 		return
 	var pitch := _em(size)
 	var x := at.x
 	for i in text.length():
 		var ink_colour: Color = ink[i] if i < ink.size() else colour
 		draw_string(_font, Vector2(x, at.y), text.substr(i, 1),
-				HORIZONTAL_ALIGNMENT_LEFT, -1.0, size, ink_colour)
+				HORIZONTAL_ALIGNMENT_LEFT, -1.0, size,
+				Color(ink_colour, ink_colour.a * alpha))
 		x += pitch
-
-
-## One em of the label font at `size`: what a CJK glyph advances, and so the pitch
-## every label written character by character is laid out at.
-func _em(size: int) -> float:
-	return _font.get_string_size("〇", HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
 
 
 ## One label on the card, its top pointing radially outwards so a name stands the
@@ -981,13 +1189,10 @@ func _em(size: int) -> float:
 ## changes hands - `ink`, when the label's characters are not all one colour, is
 ## handed on to `_draw_run` and the box stays the one this measures.
 func _radial_label(at: Vector2, angle: float, text: String, size: int,
-		colour: Color, ink: Array = []) -> void:
-	var turn := angle
-	if angle > PI * 0.5 and angle < PI * 1.5:
-		turn += PI
+		colour: Color, ink: Array = [], alpha := 1.0, scale := 1.0) -> void:
 	var extent := _font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size)
-	draw_set_transform(at, turn, Vector2.ONE)
-	_draw_run(Vector2(-extent.x * 0.5, extent.y * 0.34), text, size, colour, ink)
+	draw_set_transform(at, _run_turn(angle), Vector2(scale, scale))
+	_draw_run(Vector2(-extent.x * 0.5, extent.y * 0.34), text, size, colour, ink, alpha)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
@@ -995,10 +1200,11 @@ func _radial_label(at: Vector2, angle: float, text: String, size: int,
 ## than as a ring's own name - the 驿马 is where it is, not part of the ring it
 ## happens to sit on, so it is not turned with the card the way `_radial_label`
 ## turns the rings' names.
-func _upright_label(at: Vector2, text: String, size: int, colour: Color) -> void:
+func _upright_label(at: Vector2, text: String, size: int, colour: Color,
+		alpha := 1.0) -> void:
 	var extent := _font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size)
 	draw_string(_font, at + Vector2(-extent.x * 0.5, extent.y * 0.34), text,
-			HORIZONTAL_ALIGNMENT_LEFT, -1.0, size, colour)
+			HORIZONTAL_ALIGNMENT_LEFT, -1.0, size, Color(colour, colour.a * alpha))
 
 
 ## One line of a 宫's block, the right way up and centred on `at`: the name in its
@@ -1007,7 +1213,7 @@ func _upright_label(at: Vector2, text: String, size: int, colour: Color) -> void
 ## in the margin to the left of the label rather than joining it - so a 宫 that is 空
 ## still lines its 神 up with the 星 and the 门 under it (用户 2026-10-09 第十二轮).
 func _upright_pair(at: Vector2, mark: String, head: String, head_colour: Color,
-		tail: String, tail_colour: Color) -> void:
+		tail: String, tail_colour: Color, alpha := 1.0) -> void:
 	var head_size := _font.get_string_size(head, HORIZONTAL_ALIGNMENT_LEFT, -1, LINE_SIZE)
 	var tail_size := _font.get_string_size(tail, HORIZONTAL_ALIGNMENT_LEFT, -1, LINE_SIZE)
 	var left := at.x - (head_size.x + tail_size.x) * 0.5
@@ -1016,12 +1222,14 @@ func _upright_pair(at: Vector2, mark: String, head: String, head_colour: Color,
 		var mark_size := _font.get_string_size(mark, HORIZONTAL_ALIGNMENT_LEFT, -1,
 				LINE_SIZE)
 		draw_string(_font, Vector2(left - mark_size.x, baseline), mark,
-				HORIZONTAL_ALIGNMENT_LEFT, -1.0, LINE_SIZE, head_colour)
+				HORIZONTAL_ALIGNMENT_LEFT, -1.0, LINE_SIZE,
+				Color(head_colour, head_colour.a * alpha))
 	draw_string(_font, Vector2(left, baseline), head, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
-			LINE_SIZE, head_colour)
+			LINE_SIZE, Color(head_colour, head_colour.a * alpha))
 	if tail != "":
 		draw_string(_font, Vector2(left + head_size.x, baseline), tail,
-				HORIZONTAL_ALIGNMENT_LEFT, -1.0, LINE_SIZE, tail_colour)
+				HORIZONTAL_ALIGNMENT_LEFT, -1.0, LINE_SIZE,
+				Color(tail_colour, tail_colour.a * alpha))
 
 
 ## One trigram, drawn as its three 爻 rather than written. The bars are turned with

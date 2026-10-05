@@ -14,6 +14,17 @@
 ## card's own lower corners now, and the strip under the card is only as tall as its
 ## two readout lines (用户 2026-10-10 第十八轮).
 ##
+## The two chips do not have to step a 时辰: the little `>>` square over 时辰− walks the
+## unit on - 日, 月, 年, back to 时辰 and round again (用户 2026-10-14: "点这个按扭,
+## 时辰−/+ 依次变为 日−/+ 月−/+ 年−/+ 时辰−/+ 轮流,并随时间步长切换颗粒度"), and the two
+## chips are relabelled to say which unit they are standing on. 日 / 月 / 年 are whole
+## days (1 / 30 / 365), so a press never moves the instant's place in the day: the 时辰
+## this whole card is cast on stays where it is, and only the date moves (see UNITS for
+## why not the astronomical 朔望月 and 回归年). The step is split at whole turns of the
+## sky: the turns land at once and **only the remainder - always inside one turn - is
+## glided** (2026-10-14: a 日 and up are not worth a 24 h+ eased spin; see `_step`), so
+## a 时辰 still glides its whole quarter turn and a 月 eases the last 29° into place.
+##
 ## Two lines, read off under the card (用户 2026-10-10 第二十轮):
 ##
 ##   三元九运 + 道历日期   九紫离火 道历四七二三年八月十九 - the 运 the 立春-turned year
@@ -40,6 +51,54 @@ extends Control
 
 const SHICHEN_SECONDS := 7200.0
 
+## What the − / + chips step by, in the order the `>>` chip walks them (用户 2026-10-14).
+## The first is the sky's own unit and the one they start on - a 时辰 is what the whole
+## card is read in - and the other three are **whole days**:
+##
+##   日  1 日   = 86400 s      - one turn of the sky, one 日柱, one 农历 day
+##   月  30 日  = 2592000 s    - the 大月 of the 农历, a month as it is spoken
+##   年  365 日 = 31536000 s   - a civil year
+##
+## Whole days deliberately, rather than the astronomical 朔望月 (29.530589 d) and
+## 回归年 (365.2421897 d): neither is a whole day, so every press would carry the
+## instant that fraction further into the day - **12.7 h a press** for the 朔望月,
+## **5.8 h** for the 回归年 - and this card is *cast on the 时辰*: the 时柱, the 奇门 局
+## and the 大六壬 天盘 all ride on it, so four presses of 年 would walk the whole day
+## away and leave the walk somewhere else in it every time. What the whole-day step
+## costs is the calendar's own drift instead - the 农历 day moves ~1 日 every second
+## press of 月, the 节气 ~5.8 h a press of 年 - which is exactly the drift a calendar
+## has: twelve 农历 months are 354.4 日, not a 岁.
+const DAY_SECONDS := 86400.0
+const MONTH_SECONDS := 30.0 * DAY_SECONDS
+const YEAR_SECONDS := 365.0 * DAY_SECONDS
+const UNITS := [
+	{"label": "时辰", "seconds": SHICHEN_SECONDS},
+	{"label": "日", "seconds": DAY_SECONDS},
+	{"label": "月", "seconds": MONTH_SECONDS},
+	{"label": "年", "seconds": YEAR_SECONDS},
+]
+## The longest step the chips *glide* rather than landing at once is one turn of the sky
+## (`Astro.SIDEREAL_DAY`): move_by() eases the instant over about a second and the sky is
+## seen to turn, which is what a 时辰 (a quarter turn) is for. A 日 or a 月 or a 年 is one,
+## thirty or three hundred and sixty-six of those turns - 用户 2026-10-14: "日以上变化不需要
+## 做24小时以上实算平滑旋转,只需按平滑360度以内差的部分" - so `_step` lands the whole turns on
+## the spot and glides only the remainder, which is where the eye's reading of the step
+## actually is (the sky is standing on the whole-turn mark and then eases the last degree
+## or two in). Landing the turns also keeps the recomputes off the glide: every frame of
+## one casts a new 排盘 and works the 农历 date out again (`Lunar.date` is ~900 Moon
+## positions a call, cached per local day precisely because a day in a 时辰 glide is rare).
+const TURN := Astro.SIDEREAL_DAY
+## The `>>` chip: a 24 x 24 square in the quarter turn over 时辰− (its own pitch above
+## that chip), its right edge flush with the column's own (ROW_RIGHT + ROW_SIZE.x = 288 =
+## the right edge of 时辰+, as the user asked: 按扭右于时辰+按扭右齐). Square rather than a
+## 38 x 24 row because the disc's rim (r 138 about (150,150)) is slanted across that
+## corner: it enters the chip 2 px from the top left - the segment from (264, 227.8) to
+## (266.5, 224), its middle under the chip's own ink and its two ends outside the 5 px
+## corner radius - where a full-width row would have 16 px of rim under it (measured
+## 2026-10-14, `.tmp/shots/hud_unit_crop.png`).
+const CYCLE_CHIP := 24.0
+const CYCLE_LABEL := ">>"
+
 ## Where the readout lines sit inside the strip: the two readout lines only (they
 ## are what the dial is read as), and the strip is just their height. The bar starts
 ## right under the card's own rectangle (SkyBackground.HUD_COMPASS_HEIGHT), so the
@@ -62,6 +121,10 @@ const PILLAR_BASELINE := 29.0
 ##
 ## 38 rather than 40 is that worst case: the widest line and a column's edge are then 2
 ## px apart instead of touching.
+##
+## A seventh chip stands over the right column since 2026-10-14 - the `>>` unit switch,
+## one pitch above 时辰− - and it is not a row of this strip: it is 24 x 24 (CYCLE_CHIP),
+## right-aligned with the column, because the rim curves through that corner.
 const ROW_SIZE := Vector2(38.0, 24.0)
 const ROW_LEFT := 12.0
 const ROW_RIGHT := 250.0    ## the card's own width (300) less the 12 px it leaves
@@ -119,6 +182,12 @@ var _ju := 0
 ## The 道历 date line the sky hands over (`SkyBackground._lunar_date`), drawn after
 ## the 三元九运 on the bar's first line.
 var _lunar := ""
+## Which entry of UNITS the two step chips are walking: 0 (时辰) until the `>>` chip
+## cycles it (用户 2026-10-14). Only the chip labels and `_step` read it.
+var _unit := 0
+## The two step chips themselves - 时辰− / 时辰+ as built, relabelled in place by
+## `_show_unit()` when the unit is cycled - kept because the label is the unit's.
+var _step_chips: Array[Button] = []
 
 
 func setup(sky_clock: TimeCore) -> void:
@@ -164,17 +233,28 @@ func _refresh() -> void:
 # ------------------------------------------------------------------- controls
 
 func _build_controls() -> void:
-	# 时辰− / 时辰+ / 现在: the right column, top to bottom.
+	# the unit switch: a 24 x 24 `>>` square over 时辰−, right edge flush with the
+	# column's. One press walks the two chips under it on to the next unit (see UNITS).
+	var cycle := _chip(CYCLE_LABEL, 12)
+	cycle.pressed.connect(_cycle_unit)
+	add_child(cycle)
+	cycle.position = Vector2(ROW_RIGHT + ROW_SIZE.x - CYCLE_CHIP, ROW_TOP - CYCLE_CHIP)
+	cycle.size = Vector2(CYCLE_CHIP, CYCLE_CHIP)
+
+	# 时辰− / 时辰+ / 现在: the right column, top to bottom. The two step chips carry the
+	# current unit's label, which `_show_unit()` writes now and rewrites on every cycle.
 	var steps := [
-		{"text": "时辰−", "at": Vector2(ROW_RIGHT, ROW_TOP), "action": _step.bind(-1)},
-		{"text": "时辰+", "at": Vector2(ROW_RIGHT, ROW_MIDDLE), "action": _step.bind(1)},
+		{"at": Vector2(ROW_RIGHT, ROW_TOP), "action": _step.bind(-1)},
+		{"at": Vector2(ROW_RIGHT, ROW_MIDDLE), "action": _step.bind(1)},
 	]
 	for spec: Dictionary in steps:
-		var step := _chip(String(spec["text"]), 12)
+		var step := _chip("", 12)
 		step.pressed.connect(spec["action"])
 		add_child(step)
 		step.position = spec["at"]
 		step.size = ROW_SIZE
+		_step_chips.append(step)
+	_show_unit()
 
 	# 星座 / 星宿: the two layers of the sky's line work, as switches on the card, in
 	# the left column's first two rows. They are the sky's own pair (the ids are what
@@ -284,12 +364,60 @@ func _chip(text: String, font_size := 13) -> Button:
 	return button
 
 
-## One press: the instant is sent a 时辰 - `direction` +1 is forward in time. The
-## clock glides there rather than cutting (TimeCore.move_by), so the sky is seen to
-## turn; a second press before it lands adds another 时辰 to the same glide.
+## One press: the instant is sent one *unit* - `direction` +1 is forward in time, and
+## the unit is whichever one the `>>` chip has walked the labels to (a 时辰 to begin
+## with).
+##
+## The step is split at whole turns of the sky: **the turns land at once and only the
+## remainder is glided** (用户 2026-10-14: "日以上变化不需要做24小时以上实算平滑旋转,只需按平滑
+## 360度以内差的部分"). A 时辰 is 7200 s, under half a turn, so the whole press is glided as
+## it always was; a 日 is one turn plus 236 s, a 月 thirty turns plus 7077 s, a 年 three
+## hundred and sixty-six turns less 57 s - those land on the spot and then ease the
+## remainder in, which is the part of the step the eye can actually follow (the sky stands
+## on the whole-turn mark and drifts the last degree or two into place). The remainder is
+## taken the short way - signed, never more than half a turn (`_within_turn`) - so a 年
+## steps the 0.24° it really is rather than winding 359.8° the other way round. See TURN
+## for why the turns are not worth gliding. The landed part is measured from the clock's
+## own **aim** (`TimeCore.aim_unix`), so three quick presses are three whole steps and not
+## three steps less the part the first is still easing through.
 func _step(direction: int) -> void:
-	if clock != null:
-		clock.move_by(float(direction) * SHICHEN_SECONDS)
+	if clock == null:
+		return
+	var seconds := float(UNITS[_unit]["seconds"]) * float(direction)
+	var remainder := _within_turn(seconds)
+	if is_equal_approx(remainder, seconds):
+		# the whole step is inside one turn: nothing to land, glide the lot
+		clock.move_by(seconds)
+		return
+	clock.set_time_unix(clock.aim_unix() + seconds - remainder)
+	clock.move_by(remainder)
+
+
+## The part of `seconds` that is inside one turn of the sky: its signed distance to the
+## nearest whole turn, so at most half a turn either way. 7200 s comes back as 7200 (no
+## turn in it, a 时辰 glides whole); 86400 s as +236 (a 日 is one turn and 236 s);
+## 31536000 s as -57 (a 年 is 366 turns less 57 s, so the sky drifts the quarter of a
+## degree *back* into place rather than spinning 359.8° forward).
+static func _within_turn(seconds: float) -> float:
+	return fposmod(seconds + TURN * 0.5, TURN) - TURN * 0.5
+
+
+## The `>>` chip: one press walks the step unit on - 时辰, 日, 月, 年 and round again
+## (用户 2026-10-14: "点这个按扭,时辰−/+ 依次变为 日−/+ 月−/+ 年−/+ 时辰−/+ 轮流,并随时间
+## 步长切换颗粒度"). Nothing is stepped here: the press only changes what the two chips
+## under it measure with, and where the instant stands.
+func _cycle_unit() -> void:
+	_unit = (_unit + 1) % UNITS.size()
+	_show_unit()
+
+
+## The two step chips are named for the unit they are walking: `时辰− / 时辰+` as built,
+## then `日− / 日+`, `月− / 月+`, `年− / 年+` - the minus is the top chip and the plus the
+## bottom one, as they always were.
+func _show_unit() -> void:
+	var label := String(UNITS[_unit]["label"])
+	for i in _step_chips.size():
+		_step_chips[i].text = label + ("−" if i == 0 else "+")
 
 
 ## Back to the real sky, on the spot: "now" is not a step, it is a place.

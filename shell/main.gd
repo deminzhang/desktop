@@ -166,8 +166,11 @@ func _on_screen_selected(index: int) -> void:
 
 
 ## The shell's own 穿透 bookkeeping: the HUD window has turned itself over, and the
-## tray's row has to say the same thing.
-func _on_passthrough_changed(_locked: bool) -> void:
+## tray's row has to say the same thing. The window style that actually passes the
+## mouse through is the host's (it owns the HUD's window styles), so the flag goes
+## over the same socket the other switches use.
+func _on_passthrough_changed(locked: bool) -> void:
+	metrics.send_command("lock %d" % (1 if locked else 0))
 	_push_tray_model()
 
 
@@ -271,6 +274,8 @@ func _on_host_online(is_online: bool) -> void:
 		metrics.send_command("wall %d" % (1 if _desktop_shown else 0))
 		# and which monitor, for the same reason: a fresh host starts on the primary
 		metrics.send_command("screen %d" % _desktop_screen)
+		# and 穿透: a fresh host has no such flag either, and this one is the HUD's
+		metrics.send_command("lock %d" % (1 if _locked_now() else 0))
 		# a fresh host re-fits the window, so an on-demand background needs the frame
 		# that shows it (the fit is a resize, exactly like the 显示器 row's move)
 		if _desktop_shown and _background != null:

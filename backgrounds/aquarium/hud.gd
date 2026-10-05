@@ -42,11 +42,13 @@ func _ready() -> void:
 	size = PANEL
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_bg = StyleBoxFlat.new()
-	_bg.bg_color = Color(0.016, 0.043, 0.058, 0.68)
+	# 用户 2026-10-13: "HUD背景太黑了,透一点" - the same softening the sky card's plate
+	# got (0.72 -> 0.55 there), so the two backgrounds' HUDs still look like one family.
+	_bg.bg_color = Color(0.016, 0.043, 0.058, 0.55)
 	_bg.set_corner_radius_all(16)
 	_bg.set_border_width_all(1)
 	_bg.border_color = C_BORDER
-	_bg.shadow_color = Color(0.0, 0.0, 0.0, 0.45)
+	_bg.shadow_color = Color(0.0, 0.0, 0.0, 0.25)
 	_bg.shadow_size = 12
 	_hist["cpu"] = PackedFloat32Array()
 	_hist["gpu"] = PackedFloat32Array()

@@ -18,11 +18,13 @@
 ## A background may read further switches from the same line (shell/background.gd
 ## injects this object); the sky's are `--sky-time=<unix|ISO>`, `--sky-rate=<x>`,
 ## `--sky-view=<azimuth>,<altitude>`, `--sky-fov=<deg>`, `--sky-figures=0|1`,
-## `--sky-boundaries=0|1` and `--sky-map=lens|pan|cylinder|sphere` (which of the
-## four projections to the frame to draw with, `lens` by default: the engine's own, i.e.
-## a plain Camera3D in front of the sphere, no map at all - the horizon is a straight
-## line and the Sun enters at the lower left and leaves at the lower right; see
-## backgrounds/sky/projection.gd and CameraRig.OPENING_FOV).
+## `--sky-boundaries=0|1` and `--sky-map=fisheye|lens|pan|cylinder` (which of the
+## four projections to the frame to draw with, `fisheye` by default: the azimuthal
+## equidistant about the view axis - a degree of sky is a degree of pixel in every
+## direction radially, so a turn of the view is a rigid rotation of the picture and
+## nothing is drawn larger than the middle of the frame; see
+## backgrounds/sky/projection.gd, its shaders/sky_projection.gdshaderinc and
+## CameraRig.OPENING_ALTITUDE/FOV).
 class_name Args
 extends RefCounted
 

@@ -20,5 +20,5 @@ mesh = SubResource("SphereMesh_sky")
 material_override = SubResource("ShaderMaterial_dome")
 
 [node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 0.70710677, -0.70710677, 0, 0.70710677, 0.70710677, 0, 0, 0)
-fov = 110.0
+transform = Transform3D(1, 0, 0, 0, 0.737277, 0.6755901, 0, -0.6755901, 0.737277, 0, 0, 0)
+fov = 96.0

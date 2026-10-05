@@ -52,6 +52,15 @@ func unix() -> float:
 	return _unix
 
 
+## Where the step in flight is taking the instant; the same as the instant at rest.
+## A stepper that lands part of its step and glides the rest measures from here rather
+## than from the clock (the time bar's 日/月/年, `SkyTimeBar._step`), so pressing twice in
+## quick succession is two whole steps and not two steps less whatever the first one has
+## not closed yet - the same reason move_by() takes its step off the aim.
+func aim_unix() -> float:
+	return _aim_unix
+
+
 func julian_day() -> float:
 	return Astro.julian_day_from_unix(_unix)
 
@@ -66,7 +75,9 @@ func set_time_unix(value: float) -> void:
 	changed.emit()
 
 
-## Steps the instant, for the HUD's 时辰−/时辰+ buttons: the aim moves now, the
+## Steps the instant, for the HUD's step chips - 时辰−/时辰+ and the 日/月/年 forms the
+## `>>` switch walks them to (`SkyTimeBar._step`, which lands the whole turns of a long
+## step itself and sends only the remainder through here): the aim moves now, the
 ## instant follows over the next second. The aim takes the step rather than the
 ## clock, so three quick presses are three 时辰 and not the fraction of one the
 ## clock has got through; a step started from rest anchors on the clock first.

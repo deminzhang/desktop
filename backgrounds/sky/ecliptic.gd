@@ -32,8 +32,12 @@ const SHADER := "res://backgrounds/sky/shaders/line.gdshader"
 const RADIUS := 470.0
 const WIDTH := 0.45          ## the great circle itself, world units at RADIUS
 const TICK_WIDTH := 0.40
-## Half-length of a tick across the ecliptic, degrees of latitude: the 中气 ticks
-## reach further than the 节令 ones that sit between them.
+## How far a tick stands off the circle, north of it, in degrees of latitude: the 中气
+## ticks reach further than the 节令 ones that sit between them. North and not across - a
+## tick is drawn from the ecliptic to `+reach` and nothing below it (用户 2026-10-14:
+## "黄道的节气分野线只画线上部分,下部分不画"), and north is the upper side on screen for
+## every term the wallpaper's own opening frame shows (24 of 24, measured by
+## backgrounds/sky/projection_probe.gd, which pins both halves of that).
 const TICK_LONG := 0.75
 const TICK_SHORT := 0.45
 
@@ -66,23 +70,20 @@ static func term_longitude(index: int) -> float:
 	return float(index) * 15.0
 
 
-## The two equinoxes and the two solstices (2026-10-12): the four signs' quarters,
-## λ = 0 / 90 / 180 / 270. They are four of the 中气, and λ = 0 carries a tick like
-## every other term - a tick among twenty-four says nothing about which way the
-## circle is read, so the four points are named on the sky as well (SkyLabels). The
-## names come off TERMS, every sixth entry, rather than a second table that could
-## drift from it.
-const CARDINAL_STEP := 90.0
-
-
-## The four cardinal points as [name, direction] pairs, at λ = 90° x index, in the
+## The twenty-four solar terms as [name, direction] pairs, at λ = 15° x index, in the
 ## catalogue frame of the equinox of `jd` - the same fold the circle and its ticks
 ## take, so a name stands on the point the HUD's own readings of λ are measured from.
-static func cardinal_points(jd: float) -> Array:
+##
+## All twenty-four are handed over, in TERMS order (0 = 春分). The four quarters of the
+## circle are the ones at every sixth index (二分二至) and they are named here like the
+## other twenty rather than by a table or a rule of their own; which of the twenty-four
+## the sky writes a name for is the drawing layer's business and not this one's
+## (2026-10-14: the sky names all of them, on the card's 星宿 switch - 用户 "二十四节气
+## 都显出，并改为仅星宿开关开时显").
+static func term_points(jd: float) -> Array:
 	var points := []
-	for quarter in 4:
-		points.append({"name": TERMS[quarter * 6],
-				"direction": direction(jd, CARDINAL_STEP * float(quarter))})
+	for i in TERMS.size():
+		points.append({"name": TERMS[i], "direction": direction(jd, term_longitude(i))})
 	return points
 
 
@@ -125,9 +126,11 @@ static func pole(jd: float) -> Vector3:
 
 
 ## The ecliptic as geometry under `parent` (SkyRoot) for the instant `jd`: the
-## great circle walked in one-degree steps and a tick across it at each of the
-## twenty-four solar terms. Returns the two layers so the sky can feed them the
-## light of day and the zoom, the way it does the figures.
+## great circle walked in one-degree steps and a tick standing off it at each of the
+## twenty-four solar terms - on the north side only, from the circle itself out to the
+## term's reach (用户 2026-10-14: "黄道的节气分野线只画线上部分,下部分不画"). Returns the
+## two layers so the sky can feed them the light of day and the zoom, the way it does the
+## figures.
 ##
 ## Static from here on: the wall clock's own drift through the precession is
 ## 0.0001 deg a day, so the layer is built once and only ever turns with SkyRoot.
@@ -141,6 +144,6 @@ static func build(parent: Node3D, jd: float) -> Array:
 	for i in TERMS.size():
 		var lambda := term_longitude(i)
 		var reach := TICK_LONG if i % 2 == 0 else TICK_SHORT
-		ticks.append([point(jd, lambda, -reach), point(jd, lambda, reach)])
+		ticks.append([point(jd, lambda, 0.0), point(jd, lambda, reach)])
 	var marks := SkyLines.polyline_layer(parent, ticks, TICK_WIDTH, COLOUR, "EclipticTerms")
 	return [circle, marks]

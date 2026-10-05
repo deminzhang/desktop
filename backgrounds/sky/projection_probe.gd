@@ -1,11 +1,11 @@
 ## The sky's map to the frame, measured at the wallpaper's own scale (计划 §6.5
 ## 天球 → 屏的投影).
 ##
-## The map has two sides that must agree - shaders/sky_projection.gdshaderinc draws
-## the sphere with it, SkyProjection places the 2D layers with it - and this probe is
-## the CPU side checked against the arithmetic it claims to be, and against the
-## camera's own lens: every line here is also something the lens gets wrong, which is
-## why the map exists at all. The lens is measured beside the map, as the control.
+## The map has two sides that must agree - shaders/sky_projection.gdshaderinc draws the
+## sphere with it, SkyProjection places the 2D layers with it - and this probe is the CPU
+## side checked against the arithmetic it claims to be, and against the camera's own lens:
+## most of the lines here are also something the lens gets wrong, which is why the map
+## exists at all. The lens is measured beside the map, as the control.
 ##
 ##   "$G" --headless --path . --script res://backgrounds/sky/projection_probe.gd
 ##
@@ -14,12 +14,20 @@
 ## (CameraRig.OPENING_ALTITUDE/FOV), with the same panel stood on its end for the
 ## portrait case.
 ##
-## One thing the map cannot do is worth knowing here too, and it is pinned below
-## rather than asserted away: a frame with the zenith on it and a horizon that stays a
-## straight line is not a map of a sphere. The horizon is a circle about the zenith on
-## every map where turning swings the sky about it, so this map's horizon is a curve
-## and what it costs is measured, in pixels and in the share of the frame the ground
-## takes.
+## What is drawn since 2026-10-14 is the fisheye (SkyProjection.Map.FISHEYE, --sky-map):
+## the dome master's azimuthal equidistant, its pole on the view axis - and the opening
+## view is up (CameraRig.OPENING_ALTITUDE, 90), so that pole *is* the observer's zenith.
+## 用户's two sentences are the acceptance test, and both are measured here as *motions*
+## rather than as pictures, because that is how they were given (2026-10-12: "同一时间我
+## 转方向,则星空绕天顶转,同一方向时间走动,则星空绕北极星转"; 2026-10-14: "目标效果1：时间
+## 固定，旋转视角，看东，北，西天，星间距不变，看到以天顶为中心旋转，2：视角固定，时间变动，
+## 应看到天空以北极星为中心旋转，星间距不变"):
+##   * a turn of the view leaves every star's distance from the zenith's own point
+##     standing - the picture rotates rigidly, so no separation can change (exact at the
+##     opening, and measured again at a tilted view, where any camera-relative map has to
+##     give some of it back);
+##   * a day of the clock wheels the sky about the pole with the map's own scale field
+##     standing still - what is left of that on a plane is measured as a drift.
 ##
 ## The tree is not up in _initialize() (G39), so the one frame of work runs in
 ## _process and the probe quits from there.
@@ -45,24 +53,23 @@ func _process(_delta: float) -> bool:
 
 
 func _run() -> void:
-	# the sky's own default is the lens (sky.gd); everything from here to the
-	# comparison section is written for the pan-and-tilt grid - the one this sky was
-	# drawn with until 2026-10-12, and the one most of these numbers were taken on -
-	# and says so
-	SkyProjection.map = SkyProjection.Map.PAN
+	# the sky's own default (sky.gd): the fisheye, its pole on the view axis - and the
+	# opening view is up, so that pole is the zenith itself
+	SkyProjection.map = SkyProjection.Map.FISHEYE
 	var opening := _camera(CameraRig.OPENING_ALTITUDE)
 	var map := func(world: Vector3) -> Vector2:
 		return SkyProjection.screen_point(opening, world, FRAME)
 	var lens := func(world: Vector3) -> Vector2:
 		return _lens_point(opening, world, FRAME)
 
-	_the_zenith(map, lens)
-	_the_scale(opening, map, lens)
+	_the_framing(map, lens)
+	_the_scale(opening)
 	_the_width_is_the_frame(opening)
 	_the_horizon(opening, map)
 	_turning_swings_about_the_zenith(opening, map)
 	_time_wheels_about_the_pole()
-	_the_moon_at_the_side()
+	_the_frame_is_wider_than_the_frustum()
+	_the_ticks(opening)
 	_the_four_maps()
 	_the_turn()
 	_the_suns_day()
@@ -70,29 +77,53 @@ func _run() -> void:
 	print("XuanDesk: sky_projection_probe: %d line(s) failed" % _failures)
 
 
-# ------------------------------------------------------------------ the zenith
+# ----------------------------------------------------------------- the framing
 
-## The zenith lands on the frame's own centre line, and the whole azimuth circle at
-## the zenith closes onto that one point - the frame's top edge is 95 degrees up
-## under the opening view, so the zenith is 5 per cent of the frame down from the top
-## by construction and not by tuning (计划 §6.5 整片天空入画修订).
+## What the opening view puts where, and the map's own scale measured on it.
 ##
-## What it costs to have the zenith as a point is measured with it: a three degree
-## ring of sky around the zenith comes out 86 px tall - the frame's vertical scale,
-## exact - and a little wider than that, which is the map's own stretch at the top of
-## the frame. It is a ring, not a smear: the same ring through the lens would be the
-## sky's own, too.
-func _the_zenith(map: Callable, lens: Callable) -> void:
+## The opening view is 用户's directed one (CameraRig.OPENING_ALTITUDE/FOV: due south, 42.5
+## deg up, 96 deg of field), and its two numbers are tied together - altitude + half the
+## field = 90.5 - so the frame's own top edge stands half a degree *past* the observer's
+## zenith and the zenith's own point lands 7.5 px inside it. Half a degree inside and not
+## on the edge, because a one-pixel line exactly on row 0 is lost by the rasteriser
+## (measured on the 92 deg the framing started as: the cross's own bar came out a row
+## above the frame and only its lower arm was ever drawn). What shows at the top is
+## therefore 用户 2026-10-14's "能不能压一下让他在屏顶露个头,并标个淡白色虚十字" as pixels:
+## the hollow cross's bar, its whole lower arm, and the first dash of its upper arm with
+## the rest of that arm cut by the frame. The mark is drawn *at all* now, which it is not
+## while the point sits off the picture: the 35/80 framing this replaced put it 270 px
+## (0.19 of a frame) above the top edge and the cross never appeared.
+##
+## The frame's *bottom* is the desktop's end of the same question, and it is measured in
+## `_the_horizon`: the horizon lands 0.943 of a frame down, which leaves 34.5 px of ground
+## over the taskbar at the middle of the frame - the 地支 mark's own box with a third to
+## spare (用户 2026-10-14: "桌面任务栏以上,地平线以下要露一个字的高度").
+##
+## The map's own scale is `half the frame's height over half the field` (15.00 px per
+## degree at the opening), and this section measures it *radially* in several directions -
+## a degree of sky is a degree of pixel from the axis outwards, which is 用户 2026-10-12's
+## "从天顶到地平线从任意方向看起来都是等距的" - and the one direction where it is not:
+## across the ring at a distance `rho` from the pole the map stretches a shape by
+## `rho/sin(rho)` (1.00 at the middle, 1.571 at the horizon's own distance). That stretch
+## is the whole price of a flat chart and it is pinned here rather than asserted away.
+func _the_framing(map: Callable, lens: Callable) -> void:
+	var unit := _px_per_deg()
 	var at: Vector2 = map.call(Vector3.UP * RADIUS)
-	# derived, not pinned: the frame's top edge is OPENING_ALTITUDE + half the field, so
-	# the zenith sits that much past 90 deg below it - 5 per cent of the frame at the
-	# 100 deg opening, 9 once 用户 widened it to 110 (2026-10-12)
-	var expected := Vector2(FRAME.x * 0.5, FRAME.y
-			* (CameraRig.OPENING_ALTITUDE + CameraRig.OPENING_FOV * 0.5 - 90.0)
-			/ CameraRig.OPENING_FOV)
-	check("the zenith on the top centre", at.distance_to(expected) < 0.5,
-			"(%.2f, %.2f) on the frame, (%.2f, %.2f) predicted"
-			% [at.x, at.y, expected.x, expected.y])
+	var expected := Vector2(FRAME.x * 0.5,
+			FRAME.y * 0.5 - (90.0 - CameraRig.OPENING_ALTITUDE) * unit)
+	# the cross SkyLabels draws on the point, in the screen-space pixels it draws it in: a
+	# hollow centre, three dashes of three pixels an arm, one pixel wide. `reach` is its far
+	# end and `arm` the near end of the first dash of an arm.
+	var reach := SkyLabels.ZENITH_GAP + float(SkyLabels.ZENITH_DASHES) \
+			* (SkyLabels.ZENITH_DASH + SkyLabels.ZENITH_SPACE)
+	var arm := SkyLabels.ZENITH_GAP + SkyLabels.ZENITH_DASH
+	check("the zenith's cross pokes in at the frame's own top edge",
+			at.distance_to(expected) < 0.5 and at.y >= 1.0 and at.y - arm >= 0.0 \
+					and at.y - reach < 0.0 and at.y + reach < FRAME.y
+					and at.x - reach > 0.0 and at.x + reach < FRAME.x,
+			"%.0f deg above the view axis: (%.2f, %.2f) on the frame, (%.2f, %.2f) predicted - the point is %.2f px *inside* the top edge, so the cross's own bar has a row of its own (%.0f) and its lower arm (%.0f px) is wholly on the frame, while the upper arm is cut: its first dash starts %.2f px below the edge and the rest of the arm is off the frame, which is what \"露个头\" asks for"
+			% [90.0 - CameraRig.OPENING_ALTITUDE, at.x, at.y, expected.x, expected.y,
+			at.y, SkyLabels.ZENITH_GAP, reach, at.y - arm])
 
 	var closed := 0.0
 	for step in 16:
@@ -102,76 +133,111 @@ func _the_zenith(map: Callable, lens: Callable) -> void:
 	check("every azimuth above closes onto the zenith", closed < 4.0,
 			"the ring at altitude 89.9 is %.2f px across" % (closed * 2.0))
 
-	var reach := 3.0 / (CameraRig.OPENING_FOV * 0.5) * FRAME.y * 0.5
-	var tall := -INF
-	var wide := 0.0
-	for step in 32:
-		var bearing := float(step) * 360.0 / 32.0
-		var ring: Vector2 = map.call(Astro.horizon_direction(bearing, 87.0) * RADIUS)
-		tall = maxf(tall, absf(ring.y - at.y))
-		wide = maxf(wide, absf(ring.x - at.x))
-	var through_lens := 0.0
-	for step in 32:
-		var bearing := float(step) * 360.0 / 32.0
-		var ring: Vector2 = lens.call(Astro.horizon_direction(bearing, 87.0) * RADIUS)
-		through_lens = maxf(through_lens, absf(ring.x - at.x))
-	check("the ring around the zenith is bounded, not smeared",
-			absf(tall - reach) < 1.0 and wide < tall * 1.5,
-			"3 deg ring: %.1f px tall (%.1f exact), %.1f px wide (lens: %.1f)"
-			% [tall, reach, wide, through_lens])
+	# the scale, radially and across, at three distances from the pole
+	var camera := _camera(CameraRig.OPENING_ALTITUDE)
+	var pole := -camera.global_transform.basis.z
+	var across_pole := pole.cross(Vector3.UP).normalized()
+	var lines: Array[String] = []
+	var radial_error := 0.0
+	var across_error := 0.0
+	for rho in [20.0, 45.0, 70.0]:
+		var there := _singular(map, pole.rotated(across_pole, deg_to_rad(rho)))
+		var exact := deg_to_rad(rho) / sin(deg_to_rad(rho))
+		var per_degree := there.y * PI / 180.0
+		radial_error = maxf(radial_error, absf(per_degree - unit))
+		across_error = maxf(across_error, absf(there.x / maxf(there.y, 1.0e-6) - exact))
+		lines.append("%.0f deg off the axis: %.3f px per degree radially (%.3f exact), the shape stretched %.3f (%.3f exact)"
+				% [rho, per_degree, unit, there.x / maxf(there.y, 1.0e-6), exact])
+	check("a degree is a degree, radially, at every distance from the axis",
+			radial_error < 0.05,
+			"%s - which is 用户 2026-10-12's \"从天顶到地平线从任意方向看起来都是等距的\""
+			% " / ".join(lines))
+	check("and across the axis the map stretches a shape by rho/sin(rho)",
+			across_error < 0.02,
+			"%s: 1.00 at the axis, 1.571 at the horizon's own distance - the one price of any flat chart, and what the ring at the frame's edge pays"
+			% " / ".join(lines))
+
+	# and the same three degrees of sky through the camera's own lens, which spreads the
+	# field over the frame by *magnifying* what is off its axis (sec^2) instead: the
+	# control of every line above
+	var lens_worst := 0.0
+	for rho in [20.0, 45.0, 70.0]:
+		var there := _singular(func(world: Vector3) -> Vector2:
+				return _lens_point(camera, world, FRAME),
+				pole.rotated(across_pole, deg_to_rad(rho)))
+		lens_worst = maxf(lens_worst, there.x)
+	check("the lens pays for the same field by magnifying",
+			lens_worst * PI / 180.0 > unit * 1.5,
+			"70 deg off its axis the lens draws a degree of sky at %.2f px against the map's %.2f (%.2fx - its sec^2)"
+			% [lens_worst * PI / 180.0, unit, lens_worst * PI / 180.0 / unit])
 
 
 # ------------------------------------------------------------------- the scale
 
-## The local scale over the frame, relative to the frame's middle, in the stronger of
-## the two directions it has there: the measure the map was chosen on (计划 §6.5,
-## the table in sky_projection.gdshaderinc).
+## The local scale over the frame, relative to the frame's middle, in the stronger of the
+## two directions it has there: the measure the map was chosen on (计划 §6.5, the table in
+## sky_projection.gdshaderinc). The lens swells by sec^2 away from its axis - 6.2x at the
+## corners of this frame, which is the whole of the 2026-10-10 and the 2026-10-14 complaint
+## ("当前中心正常，周围被拉伸放大") - against the fisheye's 1.571x, which is sin's own
+## number: rho/sin(rho) at the horizon, the same price the ring above pays.
 ##
-## The grid is the frame's own pixels, and each projection is measured at the directions
-## *it* draws there - the lens' corners are not the map's corners, they are 71 degrees
-## off its axis where the map's are 89 - so the two numbers say the same thing about
-## each. The lens swells by sec^2 away from its axis: 7.4x at the sides of this frame,
-## 9.5x at its corners, which is the whole of the 2026-10-10 complaint. (Both numbers
-## move with the opening field - they were 5.5x and 6.9x at the 100 deg one the map was
-## chosen under.)
-func _the_scale(camera: Camera3D, map: Callable, lens: Callable) -> void:
-	var middle := _strongest(map, _frame_direction(camera, FRAME * 0.5, FRAME))
-	var lens_middle := _strongest(lens, _lens_direction(camera, FRAME * 0.5, FRAME))
+## The frame's own corners reach *past* the horizon's ring at this field - 97.9 deg off the
+## axis, where rho/sin(rho) is 1.724, and still 15.4 deg above the horizon: the sky is wider
+## than the 90.5 deg of axis height the frame's own top edge stands on - so the map's number
+## there is larger than the ring's, and the two bounds below are stated apart.
+func _the_scale(camera: Camera3D) -> void:
+	var here := func(world: Vector3) -> Vector2:
+		return SkyProjection.screen_point(camera, world, FRAME)
+	var middle := _strongest(here, _fisheye_direction(camera, FRAME * 0.5, FRAME))
 	var worst := 0.0
+	var sky_worst := 0.0
 	var total := 0.0
 	var count := 0
+	for column in 21:
+		for row in 13:
+			var pixel := Vector2(FRAME.x * float(column) / 20.0,
+					FRAME.y * float(row) / 12.0)
+			var direction := _fisheye_direction(camera, pixel, FRAME)
+			var at := _strongest(here, direction) / middle
+			worst = maxf(worst, at)
+			if Astro.altitude_of(direction) > 0.0:
+				sky_worst = maxf(sky_worst, at)
+			total += at * at
+			count += 1
+	var rms := sqrt(total / count)
+
+	var lens_middle := _strongest(func(world: Vector3) -> Vector2:
+			return _lens_point(camera, world, FRAME),
+			_lens_direction(camera, FRAME * 0.5, FRAME))
 	var lens_worst := 0.0
 	var lens_total := 0.0
 	for column in 21:
 		for row in 13:
 			var pixel := Vector2(FRAME.x * float(column) / 20.0,
 					FRAME.y * float(row) / 12.0)
-			var through_map := _frame_direction(camera, pixel, FRAME)
-			var here := _strongest(map, through_map) / middle
-			worst = maxf(worst, here)
-			total += here * here
-			count += 1
-			var through_lens := _strongest(lens,
+			var at := _strongest(func(world: Vector3) -> Vector2:
+					return _lens_point(camera, world, FRAME),
 					_lens_direction(camera, pixel, FRAME)) / lens_middle
-			lens_worst = maxf(lens_worst, through_lens)
-			lens_total += through_lens * through_lens
-	# the bound is relative on purpose: the opening field is a composition knob (100 deg
-	# until 2026-10-12, 110 after) and the absolute numbers move with it, while what the
-	# map is *for* does not - it holds one scale several times better than the lens does
-	# over the very same frame
-	var rms := sqrt(total / count)
+			lens_worst = maxf(lens_worst, at)
+			lens_total += at * at
 	var lens_rms := sqrt(lens_total / count)
-	check("one scale across the frame", worst < lens_worst / 3.0 and rms < lens_rms / 3.0,
-			"worst %.2fx, rms %.2fx - against the lens' own %.2fx / %.2fx over the same frame"
+
+	check("nothing in the sky is drawn larger than the middle of the frame",
+			sky_worst < 1.75,
+			"the worst the sky's own scale reaches above the horizon is %.3fx the middle's - the frame's own corner, 97.9 deg off the axis where rho/sin(rho) is 1.724; the horizon's own ring, inside it, is 1.571"
+			% sky_worst)
+	check("one scale across the frame", worst < 2.2 and rms < 1.6,
+			"worst %.2fx, rms %.2fx over the whole frame (its corners are 97.9 deg off the axis, the sky's own at 1.72 and the rest ground); the camera's own lens reaches %.2fx / %.2fx over the very same frame"
 			% [worst, rms, lens_worst, lens_rms])
-	check("the lens is the thing being replaced", lens_worst > 6.0,
-			"the lens reaches %.2fx of its middle at its own corners" % lens_worst)
+	check("the lens is the thing being replaced", lens_worst > 3.0,
+			"the lens reaches %.2fx of its middle at its own corners (its swell is sec^2, so the field decides the number: 3.95 at 80 deg of field, 6.15 at the opening 96, 9.5 at 110)" % lens_worst)
 
 
-## The frame's width is the viewing width: the map puts `half * aspect` degrees either
-## side of the view axis on the frame's own left and right edges, so what a panel
-## shows follows its shape - 178 degrees across a 16:9 panel, 56 across the same panel
-## stood on its end ("横屏>90, 竖屏<90").
+## The frame's width is the viewing width: the fisheye puts `half * aspect` degrees either
+## side of the view axis on the frame's own left and right edges, so what a panel shows
+## follows its shape - 170.7 degrees across a 16:9 panel, 54.0 across the same panel stood
+## on its end ("横屏>90, 竖屏<90") - and at the opening field that is past the horizon
+## itself, which is why the horizon's whole ring is on the frame.
 func _the_width_is_the_frame(camera: Camera3D) -> void:
 	var half := CameraRig.OPENING_FOV * 0.5
 	var landscape := half * (FRAME.x / FRAME.y)
@@ -192,24 +258,34 @@ func _the_width_is_the_frame(camera: Camera3D) -> void:
 
 # ----------------------------------------------------------------- the horizon
 
-## The horizon under the view axis is arithmetic - the opening view's pitch is 45 deg,
-## so the horizon is 45 deg below the axis and lands at y = (0.5 + 45/100) of the
-## frame - and the map has to agree with that.
+## The horizon under the directed opening view: 42.5 deg below the view axis, so its row
+## under the axis is `0.5 + 42.5/96` of the frame (y 1357.50, i.e 0.943 of the height), with
+## the ground under it (16.95 per cent of the frame) and the 地支 ring along it.
 ##
-## Off the centre column the map's rows are the camera's own rise rather than the
-## world's altitude, so the horizon climbs towards the frame's sides: that bow, and
-## the share of the frame the ground takes, are the price of one constant scale and
-## are pinned here. The share is sampled the way dome.gdshader cuts the ground - every
-## direction below the observer's horizon, over the whole frame - so it is the same
-## number the wallpaper draws, 18.8 per cent against the lens' 8 (计划 §6.5).
+## It is the one line the fisheye *bends* (a line of the sky that does not pass through
+## the view axis is a curve on any map of a sphere): away from the middle it climbs, and
+## how far is the field's business - 414 px at the opening, 272 at the 35/80 framing this
+## replaced, 430 at 110 deg ("地平线是平的" and "从整体中截取一部分" pull against each other
+## here, and 用户's answer was the narrower window). The zenith's own head on the top edge
+## costs the arc another 142 px, and that is the trade this round made: the two are one
+## knob short of independent, because the top edge is at the zenith whenever altitude + half
+## the field = 90, and a narrower field than 96 with the same edge takes the horizon off
+## the bottom instead.
+##
+## What the *bottom* has to hold is the desktop's, not the sky's: the wallpaper window is
+## the whole screen and the taskbar lies over its last CameraRig.TASKBAR px, so the row the
+## horizon lands on decides whether the 地支 mark under it is seen at all - which is what
+## the last line here asserts, in the mark's own units (用户 2026-10-14: "桌面任务栏以上,
+## 地平线以下要露一个字的高度"). The mark's box is asked of the font rather than assumed,
+## because 15 px of type draws in a 20 px line box.
 func _the_horizon(camera: Camera3D, map: Callable) -> void:
-	var pitch := CameraRig.OPENING_ALTITUDE
 	var centre: Vector2 = map.call(Astro.horizon_direction(180.0, 0.0) * RADIUS)
-	var expected_y := (0.5 + pitch / CameraRig.OPENING_FOV) * FRAME.y
+	var expected_y := (0.5 + CameraRig.OPENING_ALTITUDE / CameraRig.OPENING_FOV) * FRAME.y
 	check("the horizon under the view axis", absf(centre.y - expected_y) < 0.5,
-			"y %.2f, %.2f predicted, x %.2f" % [centre.y, expected_y, centre.x])
+			"y %.2f, %.2f predicted (%.3f of the frame), x %.2f"
+			% [centre.y, expected_y, centre.y / FRAME.y, centre.x])
 
-	var edge := _horizon_row(camera, 0.0)
+	var edge := _horizon_row(camera, FRAME.x * 0.05)
 	var bow := expected_y - edge
 	var ground := 0
 	var total := 0
@@ -218,29 +294,49 @@ func _the_horizon(camera: Camera3D, map: Callable) -> void:
 			var pixel := Vector2((float(column) + 0.5) / 256.0 * FRAME.x,
 					(float(row) + 0.5) / 144.0 * FRAME.y)
 			total += 1
-			if _frame_direction(camera, pixel, FRAME).y <= 0.0:
+			if Astro.altitude_of(_fisheye_direction(camera, pixel, FRAME)) < 0.0:
 				ground += 1
 	var share := float(ground) / float(total)
-	# both of these scale with the opening field (100 deg: 634 px and 18.8 per cent;
-	# 110: 580 and 24.5) - what is being held is that the bow stays a large fraction of
-	# the frame and the ground stays a band under the horizon rather than the picture
-	check("the bow is the known cost of the scale",
-			bow > FRAME.y * 0.35 and bow < FRAME.y * 0.5,
-			"the horizon climbs %.0f px to the frame's sides (y %.0f there, %.0f in the middle)"
-			% [bow, edge, centre.y])
-	check("the ground is a band, not the frame", share > 0.15 and share < 0.30,
-			"%.2f%% of the frame is below the horizon" % (share * 100.0))
+	check("the bow is the known cost of the field",
+			bow > FRAME.y * 0.20 and bow < FRAME.y * 0.35,
+			"the horizon climbs %.0f px from the middle to 5 per cent off the frame's left edge (y %.0f there, %.0f in the middle, %.1f per cent of the frame) - a straight horizon and a line through the observer's own axis cannot be had together: at 110 deg the same arc is 430 px, and what buys it down is the field"
+			% [bow, edge, centre.y, bow / FRAME.y * 100.0])
+	check("the ground is a band under it, not the frame",
+			share > 0.05 and share < 0.25,
+			"%.2f%% of the frame is below the horizon, the 地支 ring and the ground the sky is drawn with sitting on it"
+			% (share * 100.0))
+
+	# 用户 2026-10-14: "桌面任务栏以上,地平线以下要露一个字的高度" - the ground under the
+	# horizon has to keep one 字 of the 地支 ring clear of the desktop's taskbar, which is
+	# drawn over the frame's own last CameraRig.TASKBAR px (the wallpaper window is the whole
+	# screen, so the frame's own numbers are the screen's). The mark at this bearing stands
+	# SkyBranches.GAP below the horizon and draws in a line box asked of the font, not of the
+	# size it is set in. This is the *thinnest* stretch of the ground on the frame - the
+	# horizon's arc only rises away from the middle - and the 午 mark is on it, so one line
+	# covers the whole ring.
+	var letter := Fonts.ui_font().get_string_size("子", HORIZONTAL_ALIGNMENT_LEFT, -1,
+			SkyBranches.FONT_SIZE)
+	var clear := FRAME.y - CameraRig.TASKBAR - centre.y
+	check("one 字 of the 地支 ring stays above the taskbar",
+			clear >= SkyBranches.GAP + letter.y,
+			"the horizon crosses the middle of the frame at y %.2f, so the ground above the taskbar's own edge (%.0f of the frame's %.0f) is %.1f px; the mark that hangs there is a %.1f px line box plus its %.1f px gap, i.e. %.2f of a 字 with the whole of it on the screen"
+			% [centre.y, FRAME.y - CameraRig.TASKBAR, FRAME.y, clear, letter.y,
+			SkyBranches.GAP, (clear - SkyBranches.GAP) / letter.y])
 
 
 # ----------------------------------------------------------------- the turning
 
-## Turning swings the sky about the zenith, which is "同一时间我转方向，则星空绕天顶转":
-## the zenith holds still on the frame, the sky over it barely moves, and the sky at
-## the horizon sweeps past. The camera's own lens - the sky's default since 2026-10-12 -
-## is that same motion for the same reason (a turn is a rotation about the world's
-## vertical axis, and the zenith's own direction lies on it), with its own swell towards
-## the frame's edges; the last line measures what each of the two draws of the sky's own
-## arc overhead.
+## "同一时间我转方向，则星空绕天顶转" (2026-10-12) and "旋转视角...看到以天顶为中心旋转"
+## (2026-10-14): a turn is a rotation of the *picture* about the zenith's own point - and
+## at the opening view that is exact, to the last pixel, because the map's pole is the
+## zenith's own direction and a turn about that axis is a relabelling of the map's roll
+## alone. Every star keeps its distance from the point, so no separation between any two
+## of them can change: that is "星间距不变" read off the frame rather than argued about.
+##
+## The residual is measured again at a *tilted* view, where no camera-relative map can
+## hold it - a turn is then a rotation about the world's vertical, not about the view
+## axis, and what is left over is the map's own stretch. The camera's own lens is the
+## control on both lines.
 func _turning_swings_about_the_zenith(camera: Camera3D, map: Callable) -> void:
 	var zenith: Vector2 = map.call(Vector3.UP * RADIUS)
 	var drift := 0.0
@@ -251,6 +347,21 @@ func _turning_swings_about_the_zenith(camera: Camera3D, map: Callable) -> void:
 	check("the zenith holds still through the turn", drift < 0.5,
 			"worst drift %.2f px over 24 bearings" % drift)
 
+	var opening_fisheye := _turn_residual(SkyProjection.Map.FISHEYE,
+			CameraRig.OPENING_ALTITUDE)
+	var opening_lens := _turn_residual(SkyProjection.Map.LENS, CameraRig.OPENING_ALTITUDE)
+	var zenith_fisheye := _turn_residual(SkyProjection.Map.FISHEYE, 90.0)
+	var zenith_lens := _turn_residual(SkyProjection.Map.LENS, 90.0)
+	check("the turn at the opening holds every separation to a few per cent",
+			opening_fisheye < 8.0 and opening_lens > opening_fisheye * 3.0,
+			"10 deg of view turn leaves a star's distance from the zenith within %.2f%% of what it was (the camera's own lens, pointed the same way, %.2f%%): the fisheye's whole field turns with the sky and only its rho/sin(rho) varies, the lens' sec^2 does not turn at all"
+			% [opening_fisheye, opening_lens])
+	check("and looking up it is exact",
+			zenith_fisheye < 0.5 and zenith_lens < 0.5,
+			"the same turn with the view axis on the zenith: the fisheye leaves %.2f%%, the lens %.2f%% - a yaw of a camera about its own axis is a roll of the picture whichever map draws it, so this is the one framing where both are rigid, and it is the fisheye's pole that makes it the picture's own rotation"
+			% [zenith_fisheye, zenith_lens])
+	SkyProjection.map = SkyProjection.Map.FISHEYE
+
 	var overhead := Astro.horizon_direction(180.0, 85.0) * RADIUS
 	var low := Astro.horizon_direction(180.0, 5.0) * RADIUS
 	var turned := _camera(CameraRig.OPENING_ALTITUDE, 190.0)
@@ -258,37 +369,27 @@ func _turning_swings_about_the_zenith(camera: Camera3D, map: Callable) -> void:
 			SkyProjection.screen_point(camera, overhead, FRAME))
 	var far := SkyProjection.screen_point(turned, low, FRAME).distance_to(
 			SkyProjection.screen_point(camera, low, FRAME))
-	var lens_near := _lens_point(turned, overhead, FRAME).distance_to(
-			_lens_point(camera, overhead, FRAME))
 	check("the sky moves least over the zenith", near < far * 0.2,
 			"10 deg turn: %.1f px overhead, %.1f px at the horizon, ratio %.2f"
 			% [near, far, near / maxf(far, 1.0e-6)])
-	# How far the sky itself moves under that turn, at the frame's own middle scale: ten
-	# degrees of azimuth is only cos(altitude) degrees of sky, so the star overhead is 11
-	# px of sky where the one at the horizon is 129. The pan grid draws that motion a
-	# third wider than it is (14.9 px); the camera's own lens - the sky's default since
-	# 2026-10-12 - draws it a tenth narrow (10.0), its own swell at the top of the frame
-	# doing the work. (Until 2026-10-12 this line read the other way round - the lens at
-	# 17.8 px, "the map is the closer of the two". The lens was measured through
-	# --headless's square viewport, which put its horizontal scale out by the frame's
-	# whole aspect: the fault was in the probe, not in the lens, and it is fixed in
-	# _camera().)
-	var scale := FRAME.y * 0.5 / (CameraRig.OPENING_FOV * 0.5)
-	var own := 10.0 * cos(deg_to_rad(85.0)) * scale
-	check("the turn's overhead motion is drawn near the sky's own arc",
-			lens_near < own * 1.1 and near > own * 1.15,
-			"the star overhead is %.1f px of sky by the frame's own scale: the camera's own lens draws %.1f (%.2fx, the default), the pan grid %.1f (%.2fx)"
-			% [own, lens_near, lens_near / own, near, near / own])
 
 
 # -------------------------------------------------------------------- the time
 
-## Time wheels the sky about the pole, which is "同一方向时间走动，则星空绕北极星转".
-## The view is held on the pole (north, the observer's own latitude) and a star ten
-## degrees off it is followed for three quarters of a day: it keeps its ten degrees,
-## goes round the pole at 90 degrees per six hours, and goes round it anticlockwise -
-## which is the way the sky turns when you stand facing north.
+## "同一方向时间走动，则星空绕北极星转" (2026-10-12) and "视角固定，时间变动，应看到天空以北极
+## 星为中心旋转，星间距不变" (2026-10-14): a star ten degrees off the pole keeps its ten
+## degrees, goes round the pole 90 degrees per six hours, and goes round it anticlockwise -
+## the way the sky turns when you stand facing north.
+##
+## The view is held on the pole for that measurement (north, the observer's own latitude),
+## which is where the fisheye's own pole is too, so the day is as rigid there as the turn
+## is at the opening. The wallpaper's real view is the zenith, so "星间距不变" is measured
+## a second time from *there*: a pair of stars ten degrees off the pole, two degrees apart
+## along it, followed for three quarters of a day. A plane cannot hold a sphere's whole day
+## rigid about every axis at once, so the line is the size of what is left - and the
+## camera's own lens, whose scale runs with sec^2, is the control.
 func _time_wheels_about_the_pole() -> void:
+	SkyProjection.map = SkyProjection.Map.FISHEYE
 	var jd := Astro.julian_day(2026, 10, 22, 0, 0, 0.0)
 	var camera := _camera(LATITUDE, 0.0)
 	var pole: Vector2 = SkyProjection.screen_point(camera,
@@ -322,8 +423,313 @@ func _time_wheels_about_the_pole() -> void:
 	var predicted := 10.0 / (CameraRig.OPENING_FOV * 0.5) * FRAME.y * 0.5
 	check("the pole is where the observer's latitude puts it",
 			absf(reach - predicted) < predicted * 0.05,
-			"a ten degree star stands %.1f px from it (%.1f predicted at this frame)"
+			"a ten degree star stands %.1f px from it at this map's scale (%.1f predicted)"
 			% [reach, predicted])
+
+	var drift := _wheel_drift(SkyProjection.Map.FISHEYE, CameraRig.OPENING_ALTITUDE)
+	var lens_drift := _wheel_drift(SkyProjection.Map.LENS, CameraRig.OPENING_ALTITUDE)
+	check("a pair of stars keeps its separation through the watched day",
+			drift >= 0.0 and drift < 45.0 and lens_drift > drift * 2.0,
+			"two stars two degrees apart across the view axis, followed from the opening over three quarters of a day while they are on the frame: their separation moves by %.2f%% (the camera's own lens: %.2f%%) - the map's own scale, rho/sin(rho), varies as the pair wheels through it, and that is all of it: the sky itself is rigid, and a degree of sky *radially* is exactly a degree of pixel all day. The bound is the window's own size, which is why it is wider than the 25 this line carried at the 35/80 framing (24.64 per cent then)"
+			% [drift, lens_drift])
+	SkyProjection.map = SkyProjection.Map.FISHEYE
+
+
+## How much a pair of stars' separation moves over three quarters of a day, as a
+## percentage of the separation it started with, seen from the opening view - and
+## measured only while both stars are *on the frame*, because that is the only stretch of
+## the day 用户's eye is following them for (the sky wheels 15 deg an hour, so a
+## constellation crosses a 171 x 96 deg window in about five hours). The pair starts on the
+## view axis, two degrees apart across it; the sky itself is rigid, so what this
+## measures is the map - the local scale a pair sits on changes as the pair wheels
+## through the map's own radius.
+##
+## The window's own size is part of the number, so it is not comparable across framings:
+## the wider the frame, the longer the pair is watched and the further out it gets before it
+## leaves - 7 of the 24 samples keep it on the frame at the 35/80 framing, 8 at the
+## opening, where it reaches 78 deg off the axis instead of 65, and rho/sin(rho) keeps
+## growing out there (1.39 against 1.25). Hence 39.06 per cent now against 24.64 then, both
+## of them the flat map's own price: the pole measurement above holds the same kind of
+## separation to a tenth of a pixel.
+func _wheel_drift(map: SkyProjection.Map, altitude: float) -> float:
+	var before := SkyProjection.map
+	SkyProjection.map = map
+	var camera := _camera(altitude)
+	var jd := Astro.julian_day(2026, 10, 22, 0, 0, 0.0)
+	# the celestial directions the view axis and its perpendicular are, at that instant:
+	# the pair is the axis and a direction two degrees across from it
+	var basis := Astro.sky_basis(jd, LATITUDE, LONGITUDE)
+	var here := basis.inverse() * -camera.global_transform.basis.z
+	var worst := 0.0
+	# the pair is two degrees apart across the view axis and two degrees along it: the
+	# map's own scale differs along the two, so the worse of the two is the answer
+	for side in [camera.global_transform.basis.x, camera.global_transform.basis.y]:
+		var across: Vector3 = basis.inverse() * (side * RADIUS)
+		across = (across - here * here.dot(across)).normalized()
+		worst = maxf(worst, _pair_drift(camera, here, here.rotated(across, deg_to_rad(2.0)), jd))
+	SkyProjection.map = before
+	return worst
+
+
+## How far one pair's separation moves over the watched day: `first` and `second` are the
+## two celestial directions, two degrees apart, and only the samples where both are on the
+## frame are read.
+func _pair_drift(camera: Camera3D, first: Vector3, second: Vector3, jd: float) -> float:
+	var separation := func(jd_ut: float) -> Vector2:
+		var turn := Astro.sky_basis(jd_ut, LATITUDE, LONGITUDE)
+		var one := SkyProjection.screen_point(camera, turn * first * RADIUS, FRAME)
+		var two := SkyProjection.screen_point(camera, turn * second * RADIUS, FRAME)
+		if not Rect2(Vector2.ZERO, FRAME).has_point(one) \
+				or not Rect2(Vector2.ZERO, FRAME).has_point(two):
+			return Vector2(-1.0, 0.0)
+		return Vector2(one.distance_to(two), 1.0)
+	var start := -1.0
+	var low := INF
+	var high := -INF
+	var kept := 0
+	for step in 24:
+		var here_at: Vector2 = separation.call(jd + float(step) * 0.03125)
+		if here_at.x < 0.0:
+			continue
+		if start < 0.0:
+			start = here_at.x
+		low = minf(low, here_at.x)
+		high = maxf(high, here_at.x)
+		kept += 1
+	if kept < 4 or start <= 0.0:
+		return 0.0
+	return (high - low) / start * 100.0
+
+
+## How far a ten degree turn of the view is from a rigid rotation of the picture about the
+## zenith's own point, as a percentage of the star's own distance from that point, over a
+## grid of the sky: zero means every separation on the frame is untouched by the turn.
+## The zenith's point is measured on each of the two frames rather than assumed to hold
+## still, so the world-measured grids (the cylinder's zenith is a whole row) are measured
+## by the same line.
+func _turn_residual(map: SkyProjection.Map, altitude: float, turn_deg := 10.0) -> float:
+	var before := SkyProjection.map
+	SkyProjection.map = map
+	var one := _camera(altitude, 180.0)
+	var two := _camera(altitude, 180.0 + turn_deg)
+	var here := SkyProjection.screen_point(one, Vector3.UP * RADIUS, FRAME)
+	var there := SkyProjection.screen_point(two, Vector3.UP * RADIUS, FRAME)
+	var worst := 0.0
+	for azimuth_step in 24:
+		for altitude_step in 9:
+			var direction := Astro.horizon_direction(float(azimuth_step) * 15.0,
+					10.0 + float(altitude_step) * 9.0) * RADIUS
+			var before_at := SkyProjection.screen_point(one, direction, FRAME)
+			var after_at := SkyProjection.screen_point(two, direction, FRAME)
+			if not is_finite(before_at.x) or not is_finite(after_at.x):
+				continue
+			var reach := before_at.distance_to(here)
+			# a star the map draws on top of the zenith's own point has no radius to
+			# measure a change of, and one the lens has thrown to the edge of the frame
+			# (hundreds of pixels per degree) is not a star the eye is following
+			if reach < 50.0 or after_at.distance_to(there) > FRAME.length():
+				continue
+			worst = maxf(worst, absf(after_at.distance_to(there) - reach) / reach)
+	SkyProjection.map = before
+	return worst * 100.0
+
+
+# ------------------------------------------------------------------ the frustum
+
+## The picture is *wider* than the camera's own frustum, which is why a body hung off the
+## sphere's centre carries SkyProjection.keep_visible() rather than trusting the frustum
+## (计划 §6.5「一处要跟着走的东西」, A33/A36): the fisheye lays the *angle* off the axis on
+## the frame, 85.3 deg across at the opening against the lens' gnomonic 63.1, so a body at
+## 63..98 deg off the axis is inside the picture and outside the frustum at once - the
+## light version of what the world-measured grids (pan, cylinder) do at 89 deg. The day's
+## Moon and the seven planets are the meshes that depend on it.
+##
+## The control is measured a pixel *inside* the frame: at this framing the zenith's own
+## point sits within a row of the frame's top edge, i.e. of the frustum's own edge, and
+## `is_position_in_frustum` rounds it out while the map's own `in_frame` rounds it in - a
+## boundary case, not a disagreement (measured on the 92-deg framing, where the point was
+## exactly on the edge: all 35 hits the tight test found in the loose one were the zenith,
+## at ndc.y 1.0000).
+func _the_frame_is_wider_than_the_frustum() -> void:
+	var camera := _camera(CameraRig.OPENING_ALTITUDE)
+	var outside := 0
+	var on_frame := 0
+	var widest := 0.0
+	for azimuth_step in 72:
+		for altitude_step in 37:
+			var world := Astro.horizon_direction(float(azimuth_step) * 5.0,
+					-90.0 + float(altitude_step) * 5.0) * RADIUS
+			if not SkyProjection.in_frame(camera, world, FRAME):
+				continue
+			on_frame += 1
+			if not camera.is_position_in_frustum(world):
+				outside += 1
+				widest = maxf(widest,
+						rad_to_deg((-camera.global_transform.basis.z).angle_to(
+						world.normalized())))
+	SkyProjection.map = SkyProjection.Map.LENS
+	var lens_outside := 0
+	for azimuth_step in 72:
+		for altitude_step in 37:
+			var world := Astro.horizon_direction(float(azimuth_step) * 5.0,
+					-90.0 + float(altitude_step) * 5.0) * RADIUS
+			if SkyProjection.in_frame(camera, world, FRAME, -1.0) \
+					and not camera.is_position_in_frustum(world):
+				lens_outside += 1
+	SkyProjection.map = SkyProjection.Map.FISHEYE
+	check("the sky's own frame is wider than the camera's, so the frustum cannot be the test",
+			outside > 100 and lens_outside == 0,
+			"%d of %d of the sky's own directions are on the picture and outside the frustum (up to %.1f deg off the axis, where the frame's own edge is 85.3 and its corners 97.9); under the camera's own lens the same count is %d, measured a pixel inside the frame so that the zenith - which sits within a row of the frame's top edge at this framing, and of the frustum's own edge with it - is not counted as on one side of a boundary both tests round differently. Away from that edge the two agree by construction, which is why the bodies that hang off the sphere's centre call keep_visible()"
+			% [outside, on_frame, widest, lens_outside])
+
+
+# ------------------------------------------------------------------- the ticks
+
+## The two scales' ticks as the sky draws them: the 宿's divisions either side of the
+## equator, and the twenty-four solar terms standing off the ecliptic.
+##
+## 用户 2026-10-14 asked for the terms' ticks to read as marks *on* their circle rather than
+## bands across it - "黄道的节气分野线只画线上部分,下部分不画" - so the line below pins the
+## side they are drawn on: `Ecliptic.build` runs each one from `point(jd, lambda, 0.0)` to
+## `point(jd, lambda, +reach)`, and +reach has to come out *above* the circle at every term
+## the opening frame shows, or the comb hangs the wrong way off the line. Both calls here
+## are the builder's own, so this line fails if either the sign in the builder or the
+## frame's own up-ness changes.
+##
+## The 分野 ticks on the equator are symmetric and only their *length* moved
+## ("天赤道的星宿分野线短一点", the same round), and that length is deliberately not restated
+## anywhere: `SkyBackground.MANSION_TICK` *is* `Ecliptic.TICK_LONG`. It read 1.4 - four times
+## the reach the comment beside it claimed - until this round, which is the drift one number
+## with two homes gets; on screen the tick went 45.7 -> 24.5 px at the opening.
+func _the_ticks(camera: Camera3D) -> void:
+	var jd := Astro.julian_day(2026, 10, 14, 14, 0, 0.0)
+	var basis := Astro.sky_basis(jd, LATITUDE, LONGITUDE)
+	var shown := 0
+	var flipped := 0
+	var shortest := INF
+	var longest := 0.0
+	for i in Ecliptic.TERMS.size():
+		var lambda := Ecliptic.term_longitude(i)
+		var reach := Ecliptic.TICK_LONG if i % 2 == 0 else Ecliptic.TICK_SHORT
+		var on := SkyProjection.screen_point(camera,
+				basis * Ecliptic.point(jd, lambda, 0.0) * RADIUS, FRAME)
+		var tip := SkyProjection.screen_point(camera,
+				basis * Ecliptic.point(jd, lambda, reach) * RADIUS, FRAME)
+		if not Rect2(Vector2.ZERO, FRAME).has_point(on) or not is_finite(tip.x) \
+				or not is_finite(tip.y):
+			continue
+		shown += 1
+		if tip.y > on.y:
+			flipped += 1
+		shortest = minf(shortest, on.distance_to(tip))
+		longest = maxf(longest, on.distance_to(tip))
+	check("the term ticks stand north of the ecliptic, which is up on the screen",
+			shown > 8 and flipped == 0 and shortest > 3.0,
+			"%d of the 24 terms are on the opening frame and every one of their ticks runs *above* the circle (%d the other way): %.0f..%.0f px long off the line, north of the ecliptic and nothing below it, the 中气's being the 0.75 deg reach and the 节令's the 0.45"
+			% [shown, flipped, shortest, longest])
+
+
+# ------------------------------------------------------------------- the maps
+
+## The four maps, measured against the two motions 用户 reads the sky by and against the
+## scale (--sky-map; the fisheye is what sky.gd draws with). Every map is measured on the
+## frame's own grid, the lens through its own projection and the others through the map's
+## own inverse, so each is measured where it actually draws.
+##
+##   map        px/deg  worst   the turn's residual   the day's    what it buys, and what
+##                      stretch at the opening / 45   separation   it charges
+##
+##   fisheye    the fisheye: one scale in every direction radially, a rigid turn about the
+##              zenith at the opening, and the shape of the sky kept through the day - the
+##              price is a horizon that is a ring about the zenith rather than a line
+##   lens       the camera's own lens: no map at all, and both motions come out right at the
+##              opening because a camera looking up is the same rotation - the price is sec^2
+##              (6.15x at its own corners at the opening) and a shape that breathes through
+##              the day
+##   pan        the flattest of the four and the least rigid: the frame's own two axes, one
+##              constant scale each
+##   cylinder   the world's altitude down the frame and its azimuth across: the horizon is
+##              exactly a line, the zenith a whole row, and a turn is a slide
+##
+## The chirality line is the one that caught a real bug: the world-measured maps mirror the
+## whole sky if the turn is subtracted the other way round, and a mirrored map flips the
+## winding of the sphere seen from inside, so a cull_front layer's gradient vanishes. And
+## the Moon's disc agreeing with SkyProjection to a couple of pixels is what says the shader
+## half of *this* map is the same map the CPU half places the names with
+## (.tmp/tests/ shots, taken with --shot and read back).
+func _the_four_maps() -> void:
+	var names := {
+		"fisheye": SkyProjection.Map.FISHEYE,
+		"lens": SkyProjection.Map.LENS,
+		"pan": SkyProjection.Map.PAN,
+		"cylinder": SkyProjection.Map.CYLINDER,
+	}
+	var chirality := true
+	var lines: Array[String] = []
+	for name in names:
+		SkyProjection.map = names[name]
+		var camera := _camera(CameraRig.OPENING_ALTITUDE)
+		# the view is due south: a bearing west of it (190) stands on its right, so its
+		# place on the frame has the larger x - this is the mirror guard
+		var west := SkyProjection.screen_point(camera,
+				Astro.horizon_direction(190.0, 20.0) * RADIUS, FRAME).x
+		var east := SkyProjection.screen_point(camera,
+				Astro.horizon_direction(170.0, 20.0) * RADIUS, FRAME).x
+		chirality = chirality and west > east
+		# the walk from the zenith down to the horizon, in pixels, along nine of the sky's
+		# own meridians: the distance the eye travels looking up in that direction, which
+		# is the thing "从天顶到地平线从任意方向看起来都是等距的" is about. A chord across
+		# the frame would measure something else.
+		var lengths: Array[float] = []
+		for step in 9:
+			var bearing := 180.0 - 60.0 + float(step) * 15.0
+			var walked := 0.0
+			var last := SkyProjection.screen_point(camera,
+					Astro.horizon_direction(bearing, 90.0) * RADIUS, FRAME)
+			for slice in 90:
+				var altitude := 90.0 - float(slice + 1)
+				var here := SkyProjection.screen_point(camera,
+						Astro.horizon_direction(bearing, altitude) * RADIUS, FRAME)
+				if is_finite(here.x) and is_finite(last.x):
+					walked += here.distance_to(last)
+				last = here
+			lengths.append(walked)
+		var low: float = lengths.min()
+		var high: float = lengths.max()
+		# and the shape: the worst a degree of sky is stretched against the other direction
+		# at the same point. The grid is the *sky's* own (every azimuth at nine altitudes),
+		# and each point is measured only where that map actually draws it: the frames of
+		# the four cover different parts of the sky, so a grid laid over the frame would be
+		# comparing four different pictures rather than four maps of one.
+		var worst_shape := 0.0
+		var worst_scale := 0.0
+		var unit := SkyProjection.pixels_per_radian(camera, FRAME)
+		for column in 36:
+			for row in 9:
+				var grid := Astro.horizon_direction(float(column) * 10.0,
+						5.0 + float(row) * 10.0) * RADIUS
+				var landed := SkyProjection.screen_point(camera, grid, FRAME)
+				if not is_finite(landed.x) or landed.x < 0.0 or landed.x > FRAME.x \
+						or landed.y < 0.0 or landed.y > FRAME.y:
+					continue
+				var there := _singular(func(world: Vector3) -> Vector2:
+						return SkyProjection.screen_point(camera, world, FRAME), grid)
+				worst_shape = maxf(worst_shape, there.x / maxf(there.y, 1.0e-6))
+				worst_scale = maxf(worst_scale, there.x / unit)
+		lines.append("%-9s %5.2f px/deg   scale %5.2fx   shape %5.2fx   turn %5.2f%% / %5.2f%%   day %6.2f%%   zenith-to-horizon %.0f..%.0f px (spread %3.0f%%)"
+				% [name,
+				SkyProjection.pixels_per_radian(camera, FRAME) * PI / 180.0,
+				worst_scale,
+				worst_shape,
+				_turn_residual(names[name], CameraRig.OPENING_ALTITUDE),
+				_turn_residual(names[name], 90.0),
+				_wheel_drift(names[name], CameraRig.OPENING_ALTITUDE),
+				low, high, (high - low) / ((high + low) * 0.5) * 100.0])
+	SkyProjection.map = SkyProjection.Map.FISHEYE
+	check("the maps draw the same sky, the right way round", chirality,
+			"a bearing west of the view lands on its right under all four")
+	for line in lines:
+		print("       %s" % line)
 
 
 # ------------------------------------------------------------------- the turn
@@ -335,20 +741,18 @@ func _time_wheels_about_the_pole() -> void:
 ## own point:
 ##
 ##   map        the zenith   10 deg of turn moves (85 / 45 / 10 deg up)
-##   pan        0.0 px        14.9 /  92.5 / 156.6
-##   lens       0.0 px        10.0 /  62.5 / 106.6   - the default: the camera's own
-##                                                     lens, which is a rotation about
-##                                                     the world's vertical axis and
-##                                                     so leaves the zenith's own
-##                                                     direction untouched too
+##   fisheye    0.0 px       11.4 / 102.8 / 182.8   - the default: a rotation of the
+##                                                    picture about the zenith's own point,
+##                                                    so the motion is the arc at the map's
+##                                                    own scale, 5 / 45 / 80 deg of radius
+##   lens       0.0 px       ...
+##   pan        0.0 px       ...
 ##   cylinder   4582 px      130.9 / 130.9 / 130.9   - a slide, the same at every
-##                                                     height: its zenith is a row, not
-##                                                     a point
-##   sphere     0.0 px        19.4 / 174.5 / 310.1   - exact radially, but its horizon is
-##                                                     a circle
+##                                                    height: its zenith is a row, not
+##                                                    a point
 func _the_turn() -> void:
-	# the sky's own default (sky.gd): the camera's own lens
-	SkyProjection.map = SkyProjection.Map.LENS
+	# the sky's own default (sky.gd): the fisheye
+	SkyProjection.map = SkyProjection.Map.FISHEYE
 	var camera := _camera(CameraRig.OPENING_ALTITUDE)
 	var drift: float = SkyProjection.screen_point(_faced(camera, 180.0), Vector3.UP * RADIUS,
 			FRAME).distance_to(SkyProjection.screen_point(_faced(camera, 190.0),
@@ -365,7 +769,7 @@ func _the_turn() -> void:
 			_turn_move(camera, 85.0) > 100.0,
 			"under the cylinder the same turn moves a star at 85 deg %.1f px - as much as one at 10 deg"
 			% _turn_move(camera, 85.0))
-	SkyProjection.map = SkyProjection.Map.PAN
+	SkyProjection.map = SkyProjection.Map.FISHEYE
 
 
 ## What the same turn does under the cylinder, for the comparison in the line above.
@@ -373,6 +777,15 @@ func _cylinder_turn_move(camera: Camera3D) -> float:
 	var before := SkyProjection.map
 	SkyProjection.map = SkyProjection.Map.CYLINDER
 	var moved := _turn_move(camera, 85.0)
+	SkyProjection.map = before
+	return moved
+
+
+## The same turn under the camera's own lens, for the comparison in the turning section.
+func _lens_turn_move(camera: Camera3D, altitude: float) -> float:
+	var before := SkyProjection.map
+	SkyProjection.map = SkyProjection.Map.LENS
+	var moved := _turn_move(camera, altitude)
 	SkyProjection.map = before
 	return moved
 
@@ -390,117 +803,6 @@ func _turn_move(camera: Camera3D, altitude: float) -> float:
 	return before.distance_to(after)
 
 
-# ------------------------------------------------------------------- the menu
-
-## The four maps the sky can draw with (--sky-map), measured against the two things
-## 用户 asked for together and no map of a sphere can have together: a horizon that is
-## exactly a line, and a zenith-to-horizon distance that is the same in every
-## direction. The ball is the one that gives the second exactly; the camera's own lens
-## is what the sky is drawn with (sky.gd), and the other two are here to be compared
-## with them.
-##
-##   map        the horizon's bow over this frame   the zenith-to-horizon spread
-##   lens       a line, 0 px                       its own frame's corners differ by
-##     (default)                                   6.9x: this is the 2026-10-10 report
-##   sphere     the horizon's own circle, a curve   0 per cent in every direction -
-##                                                 one degree of sky is one degree
-##                                                 of pixel radially; the picture is
-##                                                 a ball, the zenith's point above
-##                                                 the frame's top edge
-##   pan        a curve, 632 px                    11 per cent (the closest of the
-##                                                 straight-horizon family)
-##   cylinder   a line, 0 px                       0 per cent - but the *horizontal*
-##                                                 scale runs up to 1/cos, so the
-##                                                 zenith is a row, not a point
-##
-## The chirality line is the one that caught a real bug while this was being written:
-## the world-measured maps mirror the whole sky if the turn is subtracted the other way
-## round, and a mirrored map flips the winding of the sphere seen from inside, so a
-## cull_front layer's gradient vanished (measured then, on the dome/sky-on-a-ball pair
-## that has since been removed). It is also the line that catches the ball's branch
-## being turned over: measured on the frames, the plain form of that branch drew the
-## point-inverse of its own arithmetic (the Moon's disc at the antipode of where the
-## CPU side puts it) - the branch is now written negated, and this line plus the
-## Moon's disc agreement are what say so.
-func _the_four_maps() -> void:
-	var names := {
-		"pan": SkyProjection.Map.PAN,
-		"lens": SkyProjection.Map.LENS,
-		"cylinder": SkyProjection.Map.CYLINDER,
-		"sphere": SkyProjection.Map.SPHERE,
-	}
-	var chirality := true
-	var lines: Array[String] = []
-	for name in names:
-		SkyProjection.map = names[name]
-		var camera := _camera(CameraRig.OPENING_ALTITUDE)
-		# the view is due south: a bearing west of it (190) stands on its right, so its
-		# place on the frame has the larger x - this is the mirror guard
-		var west := SkyProjection.screen_point(camera,
-				Astro.horizon_direction(190.0, 20.0) * RADIUS, FRAME).x
-		var east := SkyProjection.screen_point(camera,
-				Astro.horizon_direction(170.0, 20.0) * RADIUS, FRAME).x
-		chirality = chirality and west > east
-		# the horizon's bow: its row under the view axis against its row at the frame's
-		# left edge
-		var centre := SkyProjection.screen_point(camera,
-				Astro.horizon_direction(180.0, 0.0) * RADIUS, FRAME)
-		var side := SkyProjection.screen_point(camera,
-				Astro.horizon_direction(91.4, 0.0) * RADIUS, FRAME)
-		var zenith := SkyProjection.screen_point(camera, Vector3.UP * RADIUS, FRAME)
-		# the walk from the zenith down to the horizon, in pixels, along eight of the
-		# sky's own meridians: the distance the eye travels looking up in that
-		# direction, which is the thing "从天顶到地平线从任意方向看起来都是等距的" is
-		# about. A chord across the frame would measure something else.
-		var lengths: Array[float] = []
-		for step in 9:
-			var bearing := 180.0 - 60.0 + float(step) * 15.0
-			var walked := 0.0
-			var last := SkyProjection.screen_point(camera,
-					Astro.horizon_direction(bearing, 90.0) * RADIUS, FRAME)
-			for slice in 90:
-				var altitude := 90.0 - float(slice + 1)
-				var here := SkyProjection.screen_point(camera,
-						Astro.horizon_direction(bearing, altitude) * RADIUS, FRAME)
-				if is_finite(here.x) and is_finite(last.x):
-					walked += here.distance_to(last)
-				last = here
-			lengths.append(walked)
-		var low: float = lengths.min()
-		var high: float = lengths.max()
-		# and the shape: the worst a degree of sky is stretched against the other
-		# direction at the same point, over a grid of the frame - 1.0 is a circle
-		var worst_shape := 0.0
-		for column in 21:
-			for row in 13:
-				var pixel := Vector2(FRAME.x * float(column) / 20.0,
-						FRAME.y * float(row) / 12.0)
-				# each map is measured where it draws: the lens' frame is its own
-				# (its corner is 68 deg off its axis, the others' 89)
-				var grid := _frame_direction(camera, pixel, FRAME)
-				if SkyProjection.map == SkyProjection.Map.LENS:
-					grid = _lens_direction(camera, pixel, FRAME)
-				# the frames of the world-measured maps do not cover the frame's
-				# corners in general: a point with no sky under it is not a point of
-				# that map, so it is not measured
-				var landed := SkyProjection.screen_point(camera, grid, FRAME)
-				if landed.x < 0.0 or landed.x > FRAME.x or landed.y < 0.0 \
-						or landed.y > FRAME.y:
-					continue
-				var there := _singular(func(world: Vector3) -> Vector2:
-						return SkyProjection.screen_point(camera, world, FRAME), grid)
-				worst_shape = maxf(worst_shape, there.x / maxf(there.y, 1.0e-6))
-		lines.append("%-9s bow %5.0f px   zenith-to-horizon %.0f..%.0f px (spread %3.0f%%)   worst stretch %.2fx   %.1f px/deg"
-				% [name, centre.y - side.y, low, high,
-				(high - low) / ((high + low) * 0.5) * 100.0, worst_shape,
-				(centre.y - zenith.y) / 90.0])
-	SkyProjection.map = SkyProjection.Map.PAN
-	check("the maps draw the same sky, the right way round", chirality,
-			"a bearing west of the view lands on its right under all four")
-	for line in lines:
-		print("       %s" % line)
-
-
 # --------------------------------------------------------------- the Sun's day
 
 ## 用户 2026-10-12 第二轮："太阳应当东升西落,你这样看起来太阳是横着过的,没有升"。这是
@@ -508,22 +810,17 @@ func _the_four_maps() -> void:
 ## 取一次太阳的位置，走完 24 小时，看它在画上**竖直爬了多少、横着扫了多少**——比
 ## 0.2 以下就是"横着过去、没有升"。
 ##
-## 根因不在画法，在**相机取景**：默认视角朝正南、仰角 45°，而太阳的周日轨迹（春分＝赤道）
-## 那个平面跟视轴几乎平行（夹角 95°），所以只要竖直坐标是"相机自己的仰角"，整条弧就被
-## 压平成一条横线——**而那一支正是现在的默认（`lens`）**：春分那天太阳走的就是赤道，
-## 赤道是**大圆**，大圆过球心必被投影成直线，所以"横着过"在这天是几何事实，不是画错。
-## 竖直坐标改成**世界地平高度**（`cylinder`）才把它变成"爬"。
-##
-## 这条量的因此是两件事：四个网格各量一遍（横/竖），并且钉住这个事实——**"太阳爬升"要
-## 看的是太阳的高度，不是"固定机位下它在画上往哪走"**。跟着太阳转机位时，视线中心就是
-## 太阳，画上的 y 差＝高度差：`.tmp/tests/sample.tscn` 出图量到春分 118 px、夏至 438 px。那条
-## 是真机位下的"东升西落"，这里的比值是固定机位下的"轨迹形状"，两者都记着。
+## 根因不在画法，在**相机取景**：太阳的周日轨迹（春分＝赤道）那个平面跟视轴的关系决定画上
+## 的形状。开场把视轴抬到天顶之后，赤道面与视轴成 50 度，整条轨迹在本图里就是**半径 50 度
+## 的那个圆**（`50 * px per degree` = 655 px），所以它自己就走成一个圈——"爬"这件事在图上
+## 是**太阳的高度**，跟着太阳转机位时画上的 y 差就是高度差（`.tmp/tests/sample.tscn` 出图
+## 量到春分 118 px、夏至 438 px）。
 func _the_suns_day() -> void:
 	var names := {
-		"pan": SkyProjection.Map.PAN,
+		"fisheye": SkyProjection.Map.FISHEYE,
 		"lens": SkyProjection.Map.LENS,
+		"pan": SkyProjection.Map.PAN,
 		"cylinder": SkyProjection.Map.CYLINDER,
-		"sphere": SkyProjection.Map.SPHERE,
 	}
 	var lines: Array[String] = []
 	var ratios: Dictionary = {}
@@ -555,39 +852,13 @@ func _the_suns_day() -> void:
 		ratios[name] = (high - low) / maxf(right - left, 1.0)
 		lines.append("%-9s climbs %4.0f px, sweeps %4.0f px (climb/sweep %.2f)"
 				% [name, high - low, right - left, ratios[name]])
-	SkyProjection.map = SkyProjection.Map.PAN
+	SkyProjection.map = SkyProjection.Map.FISHEYE
 	for line in lines:
 		print("       %s" % line)
-	check("the Sun's day: the camera-like maps draw the equinox track for what it is (a great circle - a line), the ball curves it, the altitude grid makes it climb",
-			ratios["pan"] < 0.1 and ratios["lens"] < 0.1
-			and ratios["sphere"] > 0.05 and ratios["sphere"] < 0.25
-			and ratios["cylinder"] > 0.25,
-			"climb/sweep with the camera held still: pan %.2f, lens %.2f, sphere %.2f, cylinder %.2f (春分: the Sun's daily circle *is* the equator that day, and a great circle through the eye projects to a straight line - under the camera's own lens as much as under the pan-and-tilt grid, which is why the ball is the first of the radial maps to show any climb at all: a great circle is a curve, not a line, on a grid that is not projective. The climb is the Sun's *altitude*, which the cylinder puts straight onto the frame's y; a camera shows it when the view is turned to follow the Sun, measured on a scratch scene at 118 px over the equinox day and 438 px over the solstice)"
-			% [ratios["pan"], ratios["lens"], ratios["sphere"], ratios["cylinder"]])
-
-## The Moon's orbit is drawn while the Moon is on the frame - and on this map the frame
-## is wider than the lens' (89 deg across the half-frame against the lens' 65), so a
-## Moon at the side of the wallpaper is inside the picture and outside the camera's
-## frustum at once. The frustum cannot be the test any more (计划 §6.5「一处要跟着走的
-## 东西」): this is the view the wallpaper was checked on, where the two disagree, and
-## the Moon's own ephemeris is what puts it there.
-func _the_moon_at_the_side() -> void:
-	var ut := Astro.julian_day(2026, 10, 22, 14, 0, 0.0)
-	var jd := Astro.tt_from_ut(ut)
-	var state := Astro.moon_state(jd)
-	var world: Vector3 = Astro.sky_basis(ut, LATITUDE, LONGITUDE) \
-			* Astro.local_from_date(jd, state.ra, state.dec) * RADIUS
-	var camera := _camera(CameraRig.OPENING_ALTITUDE, 90.0)
-	var disc := RADIUS * tan(deg_to_rad(state.radius_deg)) * SkyMoon.MAGNIFY
-	var reach := disc * SkyProjection.pixels_per_unit(camera, FRAME, RADIUS)
-	var screen := SkyProjection.screen_point(camera, world, FRAME)
-	check("a Moon at the side of the frame is on the wallpaper",
-			screen.x > 0.0 and screen.x < FRAME.x and screen.y > 0.0
-			and screen.y < FRAME.y
-			and SkyProjection.in_frame(camera, world, FRAME, reach)
-			and not camera.is_position_in_frustum(world),
-			"screen (%.1f, %.1f) of (%.0f, %.0f), disc %.1f px: the map has it, the lens' frustum does not"
-			% [screen.x, screen.y, FRAME.x, FRAME.y, reach])
+	check("the Sun's day: a line through the camera's own lens, a climb on the map that puts the altitude on the frame",
+			ratios["lens"] < 0.05 and ratios["cylinder"] > 0.15,
+			"climb/sweep with the camera held at the opening: fisheye %.2f, lens %.2f, pan %.2f, cylinder %.2f (春分 the Sun's daily circle *is* the equator - a great circle through the eye, so the camera's own lens draws it as a line; the fisheye's shape depends on where its axis points relative to that circle, which is why the two ends of the family are asserted here and the fisheye's own number is printed)"
+			% [ratios["fisheye"], ratios["lens"], ratios["pan"], ratios["cylinder"]])
 
 
 # ------------------------------------------------------------------- the tools
@@ -623,7 +894,7 @@ func _local(camera: Camera3D, turn_deg: float, rise_deg: float) -> Vector3:
 			-cos(turn) * cos(rise))
 
 
-## The sky direction the map has drawn at a pixel: the map read backwards, which is
+## The sky direction the pan grid has drawn at a pixel: the map read backwards, which is
 ## what lets a grid be laid over the frame instead of over the world.
 func _frame_direction(camera: Camera3D, pixel: Vector2, size: Vector2) -> Vector3:
 	var half := CameraRig.OPENING_FOV * 0.5
@@ -631,12 +902,24 @@ func _frame_direction(camera: Camera3D, pixel: Vector2, size: Vector2) -> Vector
 			-(pixel.y - size.y * 0.5) / (size.y * 0.5) * half)
 
 
+## The sky direction the fisheye has drawn at a pixel - its own inverse, written out here
+## rather than called, so the round trips are not the same code twice: the pixel's
+## distance from the middle is the angle off the axis at the map's own scale, and its
+## direction from the middle is the roll about the axis.
+func _fisheye_direction(camera: Camera3D, pixel: Vector2, size: Vector2) -> Vector3:
+	var offset := pixel - size * 0.5
+	var off_axis := offset.length() / (size.y * 0.5) * SkyProjection.half_angle(camera)
+	var roll := atan2(offset.x, -offset.y)
+	return camera.global_transform.basis * Vector3(sin(off_axis) * sin(roll),
+			sin(off_axis) * cos(roll), -cos(off_axis))
+
+
 ## The sky direction the lens itself has drawn at a pixel - the frame's own corner is
-## 68 degrees off its axis where the map's is 89, and both have to be measured where
+## 71 degrees off its axis where the fisheye's is 112, and both have to be measured where
 ## they draw. Out of the perspective divide: a pixel's tangent plane is
 ## (ndc.x * tan(half) * aspect, ndc.y * tan(half), -1).
 func _lens_direction(camera: Camera3D, pixel: Vector2, size: Vector2) -> Vector3:
-	var half := deg_to_rad(CameraRig.OPENING_FOV * 0.5)
+	var half := SkyProjection.half_angle(camera)
 	var ndc := Vector2(pixel.x / size.x * 2.0 - 1.0, 1.0 - pixel.y / size.y * 2.0)
 	var tangent := Vector3(ndc.x * tan(half) * (size.x / size.y), ndc.y * tan(half),
 			-1.0)
@@ -645,6 +928,12 @@ func _lens_direction(camera: Camera3D, pixel: Vector2, size: Vector2) -> Vector3
 
 func _world(azimuth: float, altitude: float) -> Vector3:
 	return Astro.horizon_direction(azimuth, altitude) * RADIUS
+
+
+## Pixels one degree of sky covers at the middle of the frame: the map's own scale, and
+## the number every figure above is stated in.
+func _px_per_deg() -> float:
+	return FRAME.y * 0.5 / (CameraRig.OPENING_FOV * 0.5)
 
 
 ## Where the camera's own lens would put a world point: the perspective projection the
@@ -669,22 +958,36 @@ func _strongest(screen_point: Callable, direction: Vector3) -> float:
 
 
 ## Both of them: x is the strongest direction, y the weakest. Equal means the map draws
-## the sky round there; 1.57 is what the dome's own grid does at the horizon (its
-## tangential scale) and what the pan-and-tilt grid does at the top and bottom of the
-## frame; 6.9 is the lens at the corners of its own frame.
+## the sky round there; 1.571 is what the fisheye does at the horizon and what the
+## pan-and-tilt grid does at the top and bottom of the frame; 9.5 is the lens at the
+## corners of the frame it is pointed at.
+##
+## The two steps are an orthonormal pair of tangents at the direction - any pair, since
+## only the magnitudes of the two scales are read off them - built from the direction
+## itself rather than from its azimuth and altitude: at the pole (the view axis, at this
+## opening) the azimuth has no direction of its own, and a basis built out of it collapses
+## there. The steps are a quarter of a degree rather than a hundredth: at the pole the map
+## turns the *arccosine* of the direction's z into a radius, and a hair-thin step off the
+## pole is arithmetically zero in float32 (cos of it rounds to 1.0, the radius to 0.0, and
+## the whole Jacobian to nothing - measured: the frame's middle pixel came out as a
+## singular 0, and every number downstream of it as infinite).
 func _singular(screen_point: Callable, direction: Vector3) -> Vector2:
-	const STEP := 0.01
-	var azimuth := Astro.azimuth_of(direction)
-	var altitude := Astro.altitude_of(direction)
-	var here: Vector2 = screen_point.call(_world(azimuth, altitude))
-	var east: Vector2 = screen_point.call(_world(azimuth + STEP, altitude))
-	var up: Vector2 = screen_point.call(_world(azimuth, altitude + STEP))
-	var along := (east - here) / (STEP * cos(deg_to_rad(altitude)))
-	var rise := (up - here) / STEP
+	const STEP := deg_to_rad(0.25)
+	var here := direction.normalized()
+	var across := Vector3.UP.cross(here)
+	if across.length() < 1.0e-4:
+		across = Vector3.FORWARD.cross(here)
+	across = across.normalized()
+	var rise := here.cross(across).normalized()
+	var at: Vector2 = screen_point.call(here * RADIUS)
+	var stepped: Vector2 = screen_point.call((here + across * STEP).normalized() * RADIUS)
+	var rised: Vector2 = screen_point.call((here + rise * STEP).normalized() * RADIUS)
+	var along := (stepped - at) / STEP
+	var up := (rised - at) / STEP
 	var a := along.x
-	var b := rise.x
+	var b := up.x
 	var c := along.y
-	var d := rise.y
+	var d := up.y
 	var trace := a * a + b * b + c * c + d * d
 	var determinant := (a * d - b * c) * (a * d - b * c)
 	var spread := sqrt(maxf(trace * trace - 4.0 * determinant, 0.0))
@@ -692,8 +995,8 @@ func _singular(screen_point: Callable, direction: Vector3) -> Vector2:
 
 
 ## The row the horizon crosses a given column at. The horizon is not a function of the
-## frame's x on this map - it is a curve - so it is walked in bearing until the map's
-## own x reaches the column: bearings west of the view's own raise x, east lower it.
+## frame's x on any of the maps - it is a curve - so it is walked in bearing until the
+## map's own x reaches the column: bearings west of the view's own raise x, east lower it.
 func _horizon_row(camera: Camera3D, x: float) -> float:
 	var east := -89.0
 	var west := 89.0

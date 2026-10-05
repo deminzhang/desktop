@@ -3,54 +3,62 @@
 //   #include "res://backgrounds/sky/shaders/sky_projection.gdshaderinc"
 //
 // The engine's camera is a rectilinear lens, and this sky is a sphere seen from its
-// centre: through that lens what is off the view axis is magnified by sec^2, so at
-// the opening 100 deg field the frame's sides are drawn at 58 px per degree where
-// the middle is drawn at 10.6 - five and a half times - and the corners are worse
-// still. The wallpaper showed exactly that and it is wrong for a sky: the middle
-// looked squeezed, the Moon's disc grew as it drifted out to the side, and the
-// stars spread apart with it (2026-10-10).
+// centre: through that lens what is off the view axis is magnified by sec^2, so the
+// frame's sides come out at 58 px per degree where the middle is drawn at 10.6 - five and
+// a half times - and the corners worse still. The wallpaper showed exactly that and it is
+// wrong for a sky: the middle looked squeezed, the Moon's disc grew as it drifted out to
+// the side, and the stars spread apart with it (2026-10-10, and again 2026-10-14:
+// "当前中心正常，周围被拉伸放大").
 //
-// The default is the camera's own lens (2026-10-12, 用户: "3D摄像机看天球要真3D投射啊,
-// 你看看sample.tscn的Camera3D啊"): mode 1 *is* `projection * view`, the engine's own
-// transform, and nothing else - a plain Camera3D in front of a sphere. The horizon is the
-// straight line a plane through the eye projects to, the field is the rig's own (110 deg:
-// the horizon's row reaches 79 deg either side of south, so the Sun enters at the lower
-// left instead of arriving from the side), and the sky's geometry is a ball either way -
-// the stars are pinned to a sphere of radius 480 inside the dome of 500. The three grids
-// below are the ones that bend one or the other, kept so the trade can be looked at rather
-// than argued about: the cylinder and the pan grid put the *angle* on the frame, and the
-// sphere is the closest to "the whole sky on a ball".
+// The map in use since 2026-10-14 is the fisheye (mode 3, --sky-map): the azimuthal
+// equidistant a dome master is drawn with, its pole on the *view axis* - the angle a
+// direction stands off that axis, at one constant scale, laid out as the frame's radius
+// in the direction the direction lies. A degree of sky is a degree of pixel radially, in
+// every direction, so nothing grows for standing away from the middle of the frame - what
+// the map stretches instead is the *across* direction, by rho/sin(rho): 1.00 at the axis,
+// 1.571 at the horizon's own ring, 1.72 at the frame's own corners at the opening (97.9 deg
+// off the axis, past that ring and still 15 deg of sky). The two motions 用户 reads the sky
+// by both come out right: a turn of the view is a rigid rotation of the picture about the
+// axis' own point (the zenith, with the view up), and the day wheels the sky about the pole
+// with the map's scale field standing still. The sky's geometry is a ball either way - the
+// stars are pinned to a sphere of radius 480 inside the dome of 500 - and what the fisheye
+// bends instead is a line of the sky that does not pass through the view axis: with the
+// view at the zenith that is the horizon, which is drawn as the ring 90 deg out from the
+// middle of the frame, the ground beyond it filling the frame's own corners.
 //
-// The numbers below are the deviation of the local scale from the middle of the frame's,
-// in the strongest of the two local directions, on the opening view over a 2560x1440
-// frame (backgrounds/sky/projection_probe.gd carries them, and everywhere in this file the
-// "grid" is the pair of angles a map puts on the frame):
+// The three other maps were measured against it and kept, so the trade can be looked at
+// rather than argued about. The numbers are the map's own scale at the middle of the
+// frame, the worst its scale reaches over the sky it draws on a 2560x1440 frame at the
+// opening (backgrounds/sky/projection_probe.gd carries them, and everywhere in this file
+// the "grid" is the pair of angles a map puts on the frame):
 //
-//   map                      rms    worst   where the worst is, and what it buys
-//   lens (the default)       2.37    6.87   the sides: 5.5x, 2.6x tangentially - the
-//                                           horizon is a line and 15 per cent of the
-//                                           frame is ground; the Sun slides across the
-//                                           frame rather than climbing it, which is the
-//                                           one thing a camera cannot help
-//   pan and tilt             1.14    1.55   the tops and bottoms of the frame - the
-//                                           flattest of the four, at 634 px of horizon
-//                                           curve ("太阳横着过", 2026-10-12)
-//   azimuthal equidistant    1.18    1.81   everywhere off centre, tangentially - a
-//                                           degree is a degree in every direction, and
-//                                           the horizon is a circle about the zenith,
-//                                           90 deg out from it (--sky-map=sphere, the
-//                                           "sky on a ball")
-//   cylinder                 1.18    17.1   one scale each way, the horizon exactly a
-//                                           line - and the zenith a whole row, stretched
-//                                           17x across the frame's top
+//   map         px/deg   worst    what it buys, and what it charges
+//   fisheye      15.00   1.52x    a degree is a degree in every direction radially, a
+//     (default)                   turn is a rotation of the picture, and the day keeps
+//                                 the sky's shape - the charge is the horizon as a ring
+//                                 and 1.571x across a shape of sky at the horizon
+//   lens         11.31   4.40x    no map at all: the engine's own `projection * view`,
+//                                 the horizon a straight line - at sec^2, 9.5x at the
+//                                 corners of the frame it is pointed at, and the same
+//                                 turn at a tilted view leaves 68 per cent of a star's
+//                                 distance from the zenith behind
+//   pan          15.00   1.49x    the frame's own two axes, one constant scale each: the
+//                                 flattest of the four, at 38 per cent of the
+//                                 zenith-to-horizon walk from side to side
+//   cylinder     15.00  11.46x    the world's altitude down the frame and its azimuth
+//                                 across: the horizon exactly a line, and the zenith a
+//                                 whole row - a turn of the view slides the sky instead
+//                                 of turning it (95 per cent off at the opening)
 //
-// The ball's own grid (--sky-map=sphere) was written by hand twice in one day and came out
-// turned over in the shader both times: the plain form of it drew the *point-inverse* of
-// its own arithmetic - the Moon's disc 648 px from where the CPU side places it, i.e. its
-// antipode about the frame's centre. It looks like a ball either way, so what showed it
-// was the names drifting off their stars (the names and discs are placed on the CPU side,
-// the sphere is drawn here). It is written negated now and agrees with
-// SkyProjection._sphere_point to 1.8 px, measured with the Moon's disc.
+// The one that was here before the fisheye - the ball drawn about the *zenith* rather
+// than about the view axis (--sky-map=sphere until 2026-10-14) - is gone: it drew the
+// same picture as the fisheye with the view up, and nothing else, because a pole that
+// does not follow the view axis leaves the rig's tilt and zoom dead. It was also written
+// by hand twice in one day and came out turned over in the shader both times (the plain
+// form drew the *point-inverse* of its own arithmetic: the Moon's disc 648 px from where
+// the CPU side places it, its antipode about the frame's centre), which cost a negated
+// rewrite and a Moon's-disc check to find; the fisheye's two angles are the camera's own
+// frame's, so there is nothing to get turned over.
 //
 // The map cannot be a *camera*, so it is written as POSITION - the modelview and
 // projection transforms are overridden rather than added to. Two consequences, both
@@ -91,25 +99,26 @@
 #define SKY_CLIP(view) sky_clip(view, MODEL_MATRIX * vec4(VERTEX, 1.0), VIEW_MATRIX, atan(1.0 / PROJECTION_MATRIX[1][1]), PROJECTION_MATRIX)
 
 // Which of the four maps above to draw with (--sky-map, set on the sky's materials when
-// the background is built). The camera's own lens is the default (用户 2026-10-12: "要真 3D
-// 投射啊"): the sky is a real sphere with the stars on it and a plain Camera3D stands at
-// its centre, so mode 1 - the engine's own `projection * view` - is the whole of it, and
-// the frame is what a 3D camera in front of a sphere draws. The other three are the grids
-// that were measured against it and kept, so the choice can be looked at rather than
-// argued about (the table at the head of this file,
+// the background is built). The fisheye is the default since 2026-10-14 (用户: "改用鱼眼/
+// 等距柱状投影 重新校正星空"): the sky is a real sphere with the stars on it and a plain
+// Camera3D stands at its centre, and every vertex of it is placed by its *angle* off the
+// view axis, laid out as the frame's radius at one constant scale - the dome master's
+// projection. The other three are the maps that were measured against it and kept, so the
+// choice can be looked at rather than argued about (the table at the head of this file,
 // backgrounds/sky/projection_probe.gd for the numbers):
 //
 //   0  pan and tilt   the frame's own two axes, one constant scale each
 //   1  lens           the camera's rectilinear projection, no map at all: the horizon
-//                     is a line and the scale swells by sec^2 away from the axis - the
-//                     default
+//                     is a line and the scale swells by sec^2 away from the axis
 //   2  cylinder       the world's altitude down the frame and its azimuth across, one
 //                     constant scale each: the horizon is exactly a line, and the
 //                     zenith is a row stretched by 1/cos instead of a point
-//   3  sphere         the ball (the dome master's projection): the zenith's point above
-//                     the frame's top edge, one scale in every direction radially - and
-//                     the horizon a circle about the zenith, i.e. the one thing the
-//                     default buys with its straight line
+//   3  fisheye        the azimuthal equidistant about the *view axis*: one scale in every
+//                     direction radially, so nothing is drawn larger than the middle of
+//                     the frame, a turn of the view is a rigid rotation of the picture
+//                     about the axis' own point, and the day keeps the sky's shape - the
+//                     default, and the one thing it charges is a line of the sky that
+//                     does not pass through the view axis (the horizon, with the view up)
 global uniform int sky_map;
 
 // A horizontal direction's azimuth about the observer's vertical axis, measured the
@@ -165,30 +174,57 @@ vec4 sky_clip(vec4 view, vec4 world, mat4 view_matrix, float half_angle, mat4 pr
 		return projection * vec4(mapped, 1.0);
 	}
 	if (sky_map == 3) {
-		// the sky on a ball (用户 2026-10-12: "你做个真正的天球,把星投射到球上" / "使用天球
-		// 模式"): the sphere's own projection, the equidistant dome master's - a degree of
-		// sky is a degree of pixel in *every* direction radially - with the zenith's point
-		// above the frame's top edge, so the horizon's whole circle and the day are in the
-		// picture. The constants are SkyProjection's own (SPHERE_REACH 1.39 frame heights,
-		// the horizon on HORIZON_ROW 0.95 of the height) written out in ndc-y: the reach
-		// is 2.78, the scale 1.7698, the zenith's row 1.88.
+		// the fisheye (用户 2026-10-14: "改用鱼眼/等距柱状投影 重新校正星空"): the
+		// azimuthal equidistant a dome master is drawn with, its pole on the *view
+		// axis* - the angle a direction stands off that axis, at one constant scale,
+		// laid out as the frame's radius in the direction the direction lies. A degree
+		// of sky is a degree of pixel radially, in every direction, so nothing grows for
+		// standing away from the middle of the picture; a turn of the view is a rigid
+		// rotation of the picture about the axis' own point (the zenith, when the view
+		// is up), and the day wheels the sky about the pole with the local scale field
+		// standing still.
 		//
-		// The two components are written as the *negative* of that offset, and not for a
-		// reason in the arithmetic - it is the same map as SkyProjection._sphere_point,
-		// which is the side the names, the branch rings and the discs are placed with.
-		// Measured: the plain form comes out on the *point-inverse* of itself - the Moon's
-		// disc 648 px from the CPU side's prediction, exactly its antipode about the
-		// frame's centre, a star likewise, and the horizon's circle fits the frame with
-		// its centre 0.44 frame heights *below* the top edge where this map puts it *above*.
-		// The other three grids do not do this (each checked the same way: four bright
-		// stars on their CPU positions, none on their antipodes), so it is this branch's
-		// shape the compiler turns over - the family 计划 §6.5 already hit once, on the
-		// dome's radius. Negated, it lands the Moon's disc within 3 px of the CPU side.
-		float radius = 1.7698 * (0.5 * PI - altitude);
-		float ball_x = -radius * sin(turn) / aspect;
-		float ball_y = radius * cos(turn) - 1.88;
-		vec3 mapped = distance * vec3(ball_x * tan(half_angle) * aspect,
-				ball_y * tan(half_angle), -1.0);
+		// The two angles are the same ones SkyProjection._fisheye_point takes, and the
+		// camera's own frame is where they live: `direction` is `view.xyz` normalised,
+		// so the axis the vertex's angle is measured off is -Z, the axis itself, and the
+		// frame's own up is the fisheye's own north - atan2(x, y) is the roll about the
+		// axis and acos(-z) the angle off it. The pixel is the frame's centre plus that
+		// angle at that roll, written in the frame's own ndc (the aspect dividing the
+		// one component, which is what the projection matrix expects) and handed to the
+		// projection so the depth pipeline sees the distance it always did.
+		float off_axis = acos(clamp(-direction.z, -1.0, 1.0));
+		float roll = atan(direction.x, direction.y);
+		vec2 ndc = vec2(sin(roll) * off_axis / (half_angle * aspect),
+				cos(roll) * off_axis / half_angle);
+		vec3 mapped = distance * vec3(ndc.x * tan(half_angle) * aspect,
+				ndc.y * tan(half_angle), -1.0);
+		return projection * vec4(mapped, 1.0);
+	}
+	if (sky_map == 3) {
+		// the fisheye (用户 2026-10-14: "改用鱼眼/等距柱状投影 重新校正星空"): the
+		// azimuthal equidistant a dome master is drawn with, its pole on the *view
+		// axis* - the angle a direction stands off that axis, at one constant scale,
+		// laid out as the frame's radius in the direction the direction lies. A degree
+		// of sky is a degree of pixel radially, in every direction, so nothing grows for
+		// standing away from the middle of the picture; a turn of the view is a rigid
+		// rotation of the picture about the axis' own point (the zenith, when the view
+		// is up), and the day wheels the sky about the pole with the local scale field
+		// standing still.
+		//
+		// The two angles are the same ones SkyProjection._fisheye_point takes, and the
+		// camera's own frame is where they live: `direction` is `view.xyz` normalised,
+		// so the axis the vertex's angle is measured off is -Z, the axis itself, and the
+		// frame's own up is the fisheye's own north - atan2(x, y) is the roll about the
+		// axis and acos(-z) the angle off it. The pixel is the frame's centre plus that
+		// angle at that roll, written in the frame's own ndc (the aspect dividing the
+		// one component, which is what the projection matrix expects) and handed to the
+		// projection so the depth pipeline sees the distance it always did.
+		float off_axis = acos(clamp(-direction.z, -1.0, 1.0));
+		float roll = atan(direction.x, direction.y);
+		vec2 ndc = vec2(sin(roll) * off_axis / (half_angle * aspect),
+				cos(roll) * off_axis / half_angle);
+		vec3 mapped = distance * vec3(ndc.x * tan(half_angle) * aspect,
+				ndc.y * tan(half_angle), -1.0);
 		return projection * vec4(mapped, 1.0);
 	}
 	// the frame's own two angles: the turn about the camera's up axis and the rise off
