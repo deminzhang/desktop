@@ -1,79 +1,68 @@
 # 玄桌面 XuanDesk
 
-Windows 桌面最底下的一层壁纸进程：可切换的 **3D 背景**（现有水族箱、星野两套）画在桌面图标之下、任务栏之下，
-右上角一个独立无边框透明置顶的 HUD（水族箱显硬件状态，星野显奇门/大六壬罗盘 + 时间栏）。
-壁纸层由 `bin/host.exe` 挂进桌面的 WorkerW，HUD 是壳的 OS 窗口，**菜单是任务栏通知区里的一个托盘图标**
-（`host.exe` 自己画的 Win32 弹出菜单，2026-10-13 从 HUD 右上角搬过去）。
+Windows 桌面最底下的一层壁纸进程：可切换的 **3D 背景**（现有水族箱、星野两套）画在桌面图标与任务栏之下，
+右上角一个独立、无边框、置顶、透明的 HUD。壁纸层由 `bin/host.exe` 挂进桌面的 WorkerW（所以它在图标**下面**），
+HUD 是壳自己的 OS 窗口，**菜单是任务栏通知区里的一个托盘图标**（`host.exe` 自己画的 Win32 弹出菜单）。
 
-本文是**技术参考**：环境、命令、开关、架构、算法、盘面规格、踩过的坑、怎么验证——写的都是**已经落地的做法**。
-"做到哪了 / 还差什么 / 每一条验收是怎么量出来的"在 `计划.md`（那里按轮次记流水）。
+本文只留概览：环境、命令、开关、架构、两套背景、性能、坑、验证。逐轮的量测账与历史讨论在 git 历史里，不再抄进来。
+
+## 功能一览
+
+- **壁纸层**：整屏 3D 场景挂在桌面图标之下、任务栏之下；多屏时可指定放哪一块屏。
+- **可切换背景**：注册表一条一项，现成两套——**水族箱**（程序化 3D 水下场景 ＋ 硬件状态 HUD）与
+  **星野**（真实天象星空：星表、银河、88 星座、日月行星、黄道与白道、廿八宿与星官）＋ 奇门/大六壬罗盘 HUD。
+- **HUD 罗盘**：奇门时家盘与大六壬五环按当前时刻排盘，翻盘时字自己飞到新位置；外加时钟刻度、三根表针、视角弧与四角控件。
+- **时间**：天钟可步进（时辰/日/月/年）、可加速、可冻结；盘上三针读的是**墙上时钟**。
+- **桌面控制**：托盘菜单（换桌面 / 显示器 / 穿透 / 桌面 / 面板 / 退出）与热键；HUD 可拖、可鼠标穿透、可整体隐显（`面板`）。
+- **静默**：星空按需渲染（静止不画），水族箱连续渲染。
 
 ## 目录
 
 - [快速开始](#快速开始) · [调试开关与热键](#调试开关与热键) · [架构](#架构桌面壳--可换背景)
-- [背景一：水族箱](#背景一水族箱) · [背景二：星野](#背景二星野3d-星空) · [性能与静默](#性能与静默) · [验证](#验证)
-- [踩过的坑](#踩过的坑不要重踩)
+- [背景一：水族箱](#背景一水族箱) · [背景二：星野](#背景二星野3d-星空) · [性能与静默](#性能与静默)
+- [踩过的坑](#踩过的坑不要重踩) · [验证](#验证)
 
 ## 快速开始
 
 ### 环境与工具链
 
-| 用途 | 路径 |
+| 用途 | 说明 |
 |---|---|
-| 工程根 | `E:/xuandesk` |
-| Godot 4.7.2 | **用装好的编辑器版**（用户要求：不要 `.tmp/tools/` 里下载的副本）：`E:/Program Files (x86)/Steam/steamapps/common/Godot Engine/godot.windows.opt.tools.64.exe`（`4.7.2.stable.steam.ed1daf0bf`）。`run.bat` / `run_debug.bat` 自己按 C–H 盘的常见 Steam 路径找它（也可 `set GODOT=…` 指定）；find/replace 时用 `export G="…/godot.windows.opt.tools.64.exe"`。**注意**：它是 GUI 子系统的程序，`print()` 的 stdout 只进得了 `> 文件 2>&1`，不要指望管道。**引擎副本不进 `.tmp/tools/`**（用户要求）：以前下载的那两份（`godot.exe` / `godot_console.exe`）已随清理删掉 |
-| `.tmp/tools/` 里的 PS 脚本 | `wins.ps1` 窗口几何 / `shot_screens.ps1` 逐屏截屏 / `desk_capture.ps1` 最小化后再截 / `click.ps1` 向窗口投 PostMessage 点击 / `xuankill.ps1` 杀干净 / `mon.ps1` 显示器列表 |
-| gcc | `C:/mingw64/bin/gcc.exe`（mingw-w64 15.1.0） |
-| 原生宿主 | `native/host.c` → `bin/host.exe` |
-| 参考项目（罗盘 HUD / 排盘算法） | 盘面与数据入口：`E:/lingwang/Scenes/Features/QimenSLG/compass/`（`compass_3d.gd` / `compass_data.gd`）；**排盘算法**：`E:/lingwang/Scripts/Algorithm/{qimen,daliuren,calendar_util}.gd` + `E:/lingwang/Scripts/Defs/xuan_consts.gd`（本项目的奇门/大六壬就是从这四个文件移植的） |
+| 工程 | Godot 4.7.2 工程，就是本目录 |
+| Godot 运行时 | **用装好的编辑器版**（用户要求：不要在工程里放引擎副本）。`run.bat` / `run_debug.bat` 按 C–H 盘常见 Steam 路径找它，也可 `set GODOT=<godot.windows.opt.tools.64.exe>`。它是 GUI 子系统程序：`print()` 的 stdout 只进得了 `> 文件 2>&1`，别指望管道 |
+| gcc / windres | mingw-w64（`native/build.cmd` / `native/build.sh` 自己找它们并清中间件） |
+| 原生宿主 | `native/host.c` → `bin/host.exe`：壁纸挂载 + 托盘菜单 + **HUD 的窗口样式**（置顶/工具窗/不激活/穿透）+ 热键 + 指标流，唯一的原生件 |
+| 参考工程 | 本地另一个 Godot 工程 lingwang：盘面与数据入口 `QimenSLG/compass/`（`compass_3d.gd` / `compass_view.gd` / `compass_data.gd`），排盘算法 `Scripts/Algorithm/{qimen,daliuren,calendar_util}.gd` + `Scripts/Defs/xuan_consts.gd`（本项目的奇门/大六壬由这四个文件移植） |
 
-### 三条命令
+### 构建与运行
 
 ```bash
+# 0) 引擎：装好的编辑器版（见上表）
+export G="<Godot 编辑器版目录>/godot.windows.opt.tools.64.exe"
 
-# 0) 二进制：装好的编辑器版（见「环境与工具链」）
-export G="E:/Program Files (x86)/Steam/steamapps/common/Godot Engine/godot.windows.opt.tools.64.exe"
+# 1) 原生宿主（等价于 native/build.cmd / native/build.sh）
+native/build.cmd
 
-# 1) 构建原生宿主（Windows 侧执行，不要在 bash 脚本里跑，见 T1/T2/T8）
-#    托盘图标是编进 exe 的资源，所以先 windres 再链接（.ico 的相对路径按当前目录
-#    解析，所以两条命令的 cwd 都要在 native/）。两个开关不要省：
-#      --preprocessor=…    windres 默认用**自己旁边那个 gcc** 预处理 .rc，且把它的
-#                          完整路径原样拼进命令行 —— gcc 装在带空格的路径下就断（T22）
-#      __USE_MINGW_ANSI_STDIO=1  老 mingw 的 %llu 会落到 msvcrt 上印出垃圾数（T23）
-cd native
-windres tray.rc -O coff -o tray_res.o \
-    --preprocessor="gcc -E -xc-header -DRC_INVOKED"
-C:/mingw64/bin/gcc.exe -O2 -s -Wall -Wextra -mwindows -D__USE_MINGW_ANSI_STDIO=1 \
-    -o ../bin/host.exe host.c tray_res.o \
-    -lws2_32 -liphlpapi -luser32 -ladvapi32 -lshell32
-rm tray_res.o
-#    （或 native/build.cmd / native/build.sh，它们自己找 gcc 与 windres、并清掉中间件；
-#      两者与上面这两条等价，改一处要改三处）
-
-# 2) 导入工程（新增/移动 class_name 或目录后必须跑，否则报 "Could not find type X"）
+# 2) 新增/移动 class_name 或目录后必须重导入，否则报 "Could not find type X"
 "$G" --headless --path . --import
 
-# 3) 跑起来 / 出图 / 校验
-powershell -NoProfile -Command "Start-Process 'E:\xuandesk\run.bat' -WorkingDirectory 'E:\xuandesk' -WindowStyle Hidden"
-"$G" --path . -- --shot=.tmp/shots/x.png --shot-frames=120 --wallpaper=0 --hud=0
+# 3) 跑（run.bat 自己找 Godot、并检查 bin/host.exe 在不在）
+run.bat
 
-#    （`--shot=.tmp/shots/x.png` 要求 .tmp/shots/ **已经存在**：写盘的路径不会建目录，见 G34）
-
-# 4) 探针（`.tmp/tests/` 下现写的 `probe_*.gd`）：headless 探针把结果 dump 成文件再比（写 `user://`），
-#    写完即删；判据与手法见本文「验证」一节。
-#    **注意**：引擎是 GUI 子系统的程序（编辑器版），`print()` 的 stdout 进不了管道，
-#    只进得了 `> 文件 2>&1` 的重定向；探针别依赖它，把结果 dump 成文件（写 `user://`）再比。
-
-# 5) 跑之前/之后一定要杀干净：`powershell -File .tmp/tools/xuankill.ps1`
-#    （它按 `*godot*` 通杀：直接跑编辑器版时一个进程就是真身，
-#      旧的控制台壳 `godot_console.exe` 会拉子进程，两种都杀得干净）
+# 出图 / 校验：参数必须写在 `--` 之后，落点目录要先存在
+"$G" --path . -- --shot=<落点>.png --shot-frames=120 --wallpaper=0 --hud=0 --background=sky
 ```
 
-### 三条硬约束（违反必然白干）
+- 用户参数一律写在 **`--` 之后**：`OS.get_cmdline_user_args()` 没有 `--` 就返回空数组，参数全落空（G29）。
+- 出图的落点**目录**要自己先建：写盘不会替你建目录（G34）。
+- 跑之前/之后杀掉所有遗留的 godot 与 host 进程（进程名带点，按 `godot.exe` 杀不干净，见 T18）。
 
-1. **不允许 `SWP_FRAMECHANGED`** 出现在重挂父窗口的调用里（V1），否则 Vulkan surface 永久失效、画面永远不出。
-2. **壁纸层是 Progman *内部*的 WorkerW**，不是顶层窗口（W2），选错会"挂载成功但全黑"。
-3. **改目录后必须删 `.godot/` 再 `--import`**，否则路径缓存会把报错指向不存在的文件。
+### 硬约束（违反必然白干）
+
+1. **绝不在重挂父窗口的调用里传 `SWP_FRAMECHANGED`**（V1）：Vulkan surface 会永久失效、画面永远不出。
+2. **壁纸层是 Progman *内部*的 WorkerW**（W2），不是顶层窗口；选错会"挂载成功但全黑"。
+3. **背景必须有真实几何**（V3）：只含 `Environment`（`BG_SKY`）的场景在重挂后的窗口里不 present。
+4. **改目录后删 `.godot/` 再 `--import`**，否则路径缓存会把报错指向不存在的文件（G11）。
 
 ## 调试开关与热键
 
@@ -83,41 +72,37 @@ powershell -NoProfile -Command "Start-Process 'E:\xuandesk\run.bat' -WorkingDire
 |---|---|---|
 | `--wallpaper=0\|1` | 1（截图时自动 0） | 是否重挂到桌面壁纸层 |
 | `--hud=0\|1` | 1 | 是否建 HUD 窗口 |
-| `--background=<id>` | `sky` | 开哪个背景（`aquarium` / `sky`），也是唯一能在无人干预下截到非默认背景的办法。默认值写在 `Backgrounds.DEFAULT`，**不是**注册表第一条——`换桌面` 的子菜单仍按注册表顺序列 `水族箱 / 星空` |
-| `--fps=<n>` | 60 | `Engine.max_fps` |
-| `--interval=<ms>` | 1000 | 指标采样周期 |
-| `--shot=<png>` / `--shot-frames=<n>` / `--shot-target=main\|hud` | — | 渲染 N 帧后存图退出（开发用）；`hud` 存 HUD 窗（菜单是系统的托盘弹窗，截不到，随 `--menu` 一起退休） |
+| `--background=<id>` | `sky` | 开哪个背景（`aquarium` / `sky`）。默认值写在 `Backgrounds.DEFAULT`，**不是**注册表第一条 |
+| `--fps=<n>` / `--interval=<ms>` | 60 / 1000 | 帧率上限 / 指标采样周期 |
+| `--shot=<png>` / `--shot-frames=<n>` / `--shot-target=main\|hud` | — | 渲染 N 帧后存图退出；`hud` 存 HUD 窗（托盘弹窗是系统的，截不到） |
 | `--exit-after=<秒>` | — | 定时退出 |
 | `--no-activate=0\|1` | 1 | HUD 窗口是否加 `WS_EX_NOACTIVATE` |
-| `--desktop-screen=<n>` | 0 | **3D 桌面放哪块屏**（0 = 主屏），发的就是托盘 → `显示器` 那一行发的同一条命令（`screen <n>`）。多屏时才在托盘里出现（单屏时那一行整行不画） |
-| `--sky-time=<unix\|ISO>` | 实时 | **星空专有**：天空的时刻（**按 UTC 写**，见 G32），出图复现用 |
-| `--sky-rate=<倍>` | 1 | 天空时间流速（1 = 实时；0 = 冻结） |
-| `--sky-view=<方位>,<高度>` | `180,42.5` | 相机朝向（罗盘方位角 + 地平高度），出图复现用。默认即 `CameraRig.OPENING_ALTITUDE`——**正南、上抬 42.5°**：地平线在自己画幅的 **0.943** 处（地面 16.95%）、天顶那点落在顶边**内侧 7.5 px**（视轴 42.5° ＋ 半视场 48°＝**90.5°**，画幅上沿跨过天顶半度；地平线那一条 = `(0.5 + 高度/fov) × 1440`＝**`90.5 × 1440 / fov`**，画幅最后 **48 px** 是任务栏 `CameraRig.TASKBAR`（可用区 0,0,2560×1392）——所以地面到哪儿由视场一个人说了算），也就是**从整体里截一段来看**，不是整盘天；`180,90` 是天顶（极点＝天顶、转方位＝整幅图绕正中刚性转，八向等距），`0,40` 是北极星那一片（一天的转轴正好落在画面正中） |
-| `--sky-fov=<度>` | 96 | 视场（12–179°，与滚轮缩放同一档位）。鱼眼这一支的尺度是 `半画幅高 ÷ 半视场`（96° ⇒ **15.00 px/°**），fov 一改整片天一起缩放；**这一档是「截一段」与「地平线别太弯」的折中，也是照任务栏那条线选的**：横着 **170.7°** 方位、地平线从中间到两侧（5% 那列）升 **414 px**（画幅自己左沿 546 px）、地面 **16.95%**——地平线落在 **1357.5**（0.943H），任务栏上沿（1392）以上留出的 **34.5 px** 正好是地支那一个字的线盒（20 px）＋1 px 缝（93° 那一档地平线 1401.3 压在任务栏底下，地支那个记号根本看不见）；再宽就只有 fov 开到 **110°**、视轴压到天顶那点正好卡在顶边上的那一档（430 px 的弧、地面 29.7%，而且画幅又变回半片天）。默认即 `CameraRig.OPENING_FOV` |
-| `--sky-figures=0\|1` | 1 | **星空专有**：星座图线与 88 个中文名（盘上 `星座` 那颗开关的初值，`set_figures`）。要看清宿图/节气名时把它关掉，蓝线就不抢眼 |
-| `--sky-mansions=0\|1` | 1 | **星空专有**：宿名 + 星官图线/名 + 廿四节气名 + 斗的八颗星改显神名（盘上 `星宿` 那颗开关的初值，`set_mansions_shown`）。**开关关态的出图靠它**（盘上的 chip 在 HUD 窗里，出图那一路碰不到） |
-| `--sky-boundaries=0\|1` | 0 | **星空专有**：是否画 IAU 星座边界（`data/constbnd.dat`，最暗的一层细带）。默认不画——它把星空割成一块块，用户要的是星座图线本身 |
-| `--sky-map=fisheye\|lens\|pan\|cylinder` | `fisheye` | **星空专有**：球面 → 屏用哪张网格（**几何永远是那颗球**，见「星点、记号与取舍」）。`fisheye`＝**等距方位**（鱼眼／穹幕机那一张：极点在**视轴**上，径向一 Degree 就是一 Degree 的像素，没有比中心更大的尺度）——默认；`lens`＝**相机自己的投影**（真 3D 场景，无映射，地平线是直线，代价是 `sec²`：四角 9.5×）；`pan`＝两轴角度各一个常数尺度；`cylinder`＝地平线也平、竖直＝世界地平高度，但转方向是整片天平移。四支的取舍见那张投影表；**`sphere`（球幕）2026-10-14 删了**（极点不在视轴上，俯仰/缩放全是死的，取景与鱼眼朝天顶时同一张图） |
+| `--desktop-screen=<n>` | 0 | 3D 桌面放哪块屏（＝托盘 → `显示器` 那一行） |
+| `--sky-time=<unix\|ISO>` | 实时 | **星空专有**：天空的时刻（**按 UTC 写**，见 G32） |
+| `--sky-rate=<倍>` | 1 | 天空时间流速（1＝实时，0＝冻结） |
+| `--sky-view=<方位>,<高度>` | `180,42.5` | 相机朝向：正南、上抬 42.5°，即从整片天里截一段 |
+| `--sky-fov=<度>` | 96 | 视场（12–179°）；地平线落在 `(0.5 + 高度/fov) × 画幅高`，最后几十 px 归任务栏 |
+| `--sky-map=fisheye\|lens\|pan\|cylinder` | `fisheye` | 球面 → 屏用哪张网格（几何永远是那颗球，见「星点、记号与取舍」） |
+| `--sky-figures=0\|1` | 1 | **星空专有**：星座图线与中文名（盘上 `星座` 那颗开关的初值） |
+| `--sky-mansions=0\|1` | 1 | **星空专有**：宿名 + 星官图线/名 + 廿四节气名 + 斗的星改显神名 + 五星改显古名（盘上 `星宿` 那颗开关的初值） |
 
-> 后八个由星空背景自己从同一命令行读（`shell/background.gd` 把 `Args` 注入每个背景，见「背景接口」）。
+> 后七个由星空背景自己从同一命令行读（`shell/background.gd` 把 `Args` 注入每个背景）。
 
 ### 热键（`host.exe` 轮询 `GetAsyncKeyState`）
 
 | 键 | 动作 |
 |---|---|
-| `Ctrl+Alt+H` | **显隐 3D 桌面**（壁纸窗口本身；事件名 `toggle_desktop`，由 shell 决定）。原来是"隐显 HUD" |
-| `Ctrl+Alt+T` | HUD 鼠标穿透（锁定/解锁） |
+| `Ctrl+Alt+H` | **显隐 3D 桌面本身**（壁纸窗口；事件 `toggle_desktop`，由 shell 决定） |
+| `Ctrl+Alt+T` | HUD 鼠标穿透（锁定/解锁；与托盘的 `穿透` 同一件事） |
 | `Ctrl+Alt+Q` | 退出 |
-| 待定 | `Ctrl+Alt+B` 切换背景（现用托盘图标里的 `换桌面` 即可；见 `计划.md` 的待定） |
+| 待定 | `Ctrl+Alt+B` 切换背景（现用托盘的 `换桌面`） |
 
-> `Ctrl+Alt+T`（穿透）与托盘里的 `穿透` 是同一件事；托盘那一下也发 `toggle_clickthrough`，
-> 所以两条路不会各走各的。`穿透` 打开后 HUD 整体鼠标穿透——**那时候唯一还点得到的就是托盘图标**，
-> 这也是菜单当初要独立成一个窗口的原因，现在由托盘接手（2026-10-13）。
->
-> **穿透不是 Godot 那面旗做的**（2026-10-13 修，G40）：`Window.mouse_passthrough` 在 Windows 上只让窗口对
-> `WM_NCHITTEST` 回 `HTTRANSPARENT`，而系统只把它转给**同一个线程里**更底下的窗口——HUD 不吃点击了，
-> 下面的进程也一个都收不到。真正跨进程的是 `WS_EX_LAYERED | WS_EX_TRANSPARENT` 这一对，由 `host.exe`
-> 套在 HUD 窗口上（和它管的置顶/工具窗/不激活同一处），客户端只把旗翻过去并推给托盘。
+> 跨进程穿透靠 `WS_EX_LAYERED | WS_EX_TRANSPARENT` 这一对，由 `host.exe` 套在 HUD 窗口上；Godot 的
+> `Window.mouse_passthrough` 只让窗口对 `WM_NCHITTEST` 回 `HTTRANSPARENT`，事件会被**吞掉**（G40）。
+> 穿透打开后唯一还点得到的就是托盘图标，这也是菜单当初要独立出来的原因。因此**托盘里有 `桌面` 与 `面板` 两行**：
+> 前者隐显 **3D 桌面本身**（壁纸层是唯一会被系统壁纸盖掉、也是唯一"藏起来再放出来"能逼它重画一帧的东西），
+> 后者隐显 **HUD 窗本身**（右上角那颗罗盘连同状态读数）；两个窗口都由 `host.exe` 隐显（`wall 0|1` / `hud 0|1`），
+> 但开关的状态在壳里（`main.gd`），所以 respawn 的宿主会被重发一遍。
 
 ---
 
@@ -131,21 +116,14 @@ powershell -NoProfile -Command "Start-Process 'E:\xuandesk\run.bat' -WorkingDire
 class_name Background extends Node3D
 
 func id() -> String                    # "aquarium" / "sky"
-func display_name() -> String          # 中文名，进 HUD 下拉框
+func display_name() -> String          # 中文名，进托盘菜单
 func build(host: Node) -> void         # 建 3D 世界（可 await）
 func teardown() -> void                # 释放
 func build_hud() -> Control            # 本背景的 HUD 内容（每次切换新建，避免状态残留）
 func hud_size() -> Vector2i            # 水族箱 280×280；星空罗盘更大
 func render_policy() -> int            # CONTINUOUS / ON_DEMAND
 func vignette_shader() -> Shader       # 各自的收尾色调
-func hud_shell_slot() -> Control       # 可选：壳自己的开关（桌面）在这份 HUD 里的座（默认 null）
 ```
-
-> 背景自己的开关（星空的 `星座` / `星宿`）**画在背景自己的 HUD 里**，不经过壳：罗盘左下角那两颗就是
-> （`SkyTimeBar` 画、`SkyBackground.set_layer_switch` 管层）。**壳自己的开关**（`桌面`）反过来：
-> 背景只给一个**座**（`hud_shell_slot()`，罗盘左下角第三行那个空 Control），壳把 `SwitchChip` 放进去、
-> 自己管状态与动作——所以那个开关和旁边两颗长得一模一样，而壳仍然不认识任何具体背景。
-> 背景给了座，壳就**不再在托盘菜单里放这一行**（一个开关只在一个地方；没给座的背景照旧由托盘放它）。
 
 ```gdscript
 
@@ -157,51 +135,41 @@ const ENTRIES := {
 }                                      # 顺序 = 换桌面子菜单的顺序
 ```
 
+> 背景自己的开关（星空的 `星座` / `星宿`）画在背景自己的 HUD 里。**壳自己的开关**反过来只在托盘里：
+> 背景的 HUD 不认识 `桌面`、也不给它留座（2026-10-12 一度把它转到盘左下角，2026-10-15 用户要求删掉那颗 chip，
+> `hud_shell_slot()` 与其座一起从接口里去掉）。
+> 托盘那两行是**壳自己两个窗口**的开关：`桌面`（壁纸窗）与 `面板`（HUD 窗，2026-10-15）——`桌面` 现在只有这一处座位，
+> 状态仍只有客户端一份（`_desktop_shown`，谁动都走 `_toggle_desktop`，与 `Ctrl+Alt+H` 同一条路）。
+> `面板` 行只在这次运行真有 HUD 窗时画（`--hud=0` 没有）。
+
 ### 目录结构
 
 ```
-E:/xuandesk/                        ← 根目录
-  project.godot  run.bat  run_debug.bat  icon.svg
-  native/       host.c  build.cmd  build.sh  tray.rc  xuandesk.ico   ← 壁纸壳 + 托盘菜单 + **HUD 的窗口样式**（置顶/工具窗/不激活/穿透），唯一原生件
-  bin/          host.exe
-  shell/        main.tscn main.gd        引导：窗口 + 背景注册表 + 切换 + 托盘模型 + 截图钩子
-                background.gd            背景接口
-                backgrounds.gd           注册表
-                wallpaper_window.gd      壁纸窗口设置（无边框/置顶/尺寸）
-                hud_window.gd            HUD 窗壳：拖动 / 穿透 / 退出
-                metrics.gd               指标客户端（host 进程 + 回环 TCP + `menu …` 模型下行）
-                args.gd  shots.gd
-  shared/ui/    中文字体加载（Fonts）、通用控件、主题
-  backgrounds/
-    aquarium/   aquarium.gd fish_school.gd mesh_factory.gd hud.gd shaders/
-    sky/        sky.gd            舞台门：天球 + 时钟 + 相机 + 各层的建与接线
-                sky_view.tscn sky_view.gd  ← **正式对照场景**：把 SkyBackground 立起来，看/出一张与壁纸同图的画
-                astro.gd          JD/GMST/LST/altaz/黄赤/岁差/ΔT/太阳/月亮
-                observer.gd timecore.gd camera_rig.gd
-                projection.gd     ← 天球 → 屏的投影（顶点与 2D 名字层共用一张，见「星点、记号与取舍」）
-                projection_probe.gd  ← 上面那条投影的**常驻探针**：20 条，`--headless --script` 跑，退出码＝失败行数
-                starcat.gd starfield.gd constellations.gd sky_lines.gd sky_labels.gd
-                precession.gd lunar_terms.gd
-                ecliptic.gd mansions.gd planets.gd vsop87.gd  ← 黄道 / 廿八宿 / 七行星 / 木土级数
-                sun.gd moon.gd    ← 太阳 / 月球（盘面 ×3 + 白道（只在月于画幅内时画）+ 「月」名）
-                branches.gd ganzhi.gd lunar.gd qimen.gd liuren.gd  ← 术数层（排盘算法 + 农历/道历）
-                sky_branches.gd                               ← 地平线上下的地支环 + 八方向
-                hud_compass.gd hud_timebar.gd                 ← 罗盘与时间栏
-                shaders/          dome star line sun moon sky_projection
-                data/             catalog.txt constbnd.dat bound_20.dat vsop87b.dat SOURCES.md
-  .tmp/         临时件（**不进 git、用完即删**，用户 2026-10-13），`.gdignore` 挡 importer：
-                shots/   出图（`--shot=…` 的落点）
-                tests/   现写现用的测试件（现在只剩用户给的 `sample.tscn`）
-                tools/   工具脚本（窗口几何 / 逐屏截屏 / 最小化后截屏 / PostMessage 点击 / 杀进程 / 显示器列表）
-                要长期留下的东西**不在这里**，放它所属的那个目录：
-                天球 → 屏的投影那条常驻探针就是这么搬过去的 → `backgrounds/sky/projection_probe.gd`
+project.godot  run.bat  run_debug.bat  icon.svg
+native/       host.c  build.cmd  build.sh  tray.rc  xuandesk.ico   ← 壁纸壳 + 托盘菜单 + HUD 窗口样式
+bin/          host.exe
+shell/        main.tscn main.gd          引导：窗口 + 背景注册表 + 切换 + 托盘模型 + 截图钩子
+              background.gd              背景接口        backgrounds.gd  注册表
+              wallpaper_window.gd        壁纸窗口设置（无边框/置顶/尺寸）
+              hud_window.gd              HUD 窗壳：拖动 / 穿透 / 退出
+              metrics.gd                 指标客户端（host 进程 + 回环 TCP + `menu …` 模型下行）
+              args.gd  shots.gd
+shared/ui/    中文字体加载（Fonts）、通用控件、主题
+backgrounds/
+  aquarium/   aquarium.gd fish_school.gd mesh_factory.gd hud.gd shaders/
+  sky/        sky.gd                 舞台门：天球 + 时钟 + 相机 + 各层的建与接线
+              sky_view.tscn sky_view.gd   ← 正式对照场景：把 SkyBackground 立起来，看/出一张与壁纸同图的画
+              astro.gd observer.gd timecore.gd camera_rig.gd
+              projection.gd projection_probe.gd   ← 天球→屏的投影，以及它的常驻探针（见「验证」）
+              starcat.gd starfield.gd constellations.gd sky_lines.gd sky_labels.gd
+              precession.gd lunar_terms.gd ecliptic.gd mansions.gd mansion_figures.gd
+              planets.gd vsop87.gd sun.gd moon.gd
+              branches.gd ganzhi.gd lunar.gd qimen.gd liuren.gd  ← 术数层（排盘算法 + 农历/道历）
+              sky_branches.gd                                   ← 地平线上下的地支环 + 八方向
+              hud_compass.gd hud_timebar.gd                     ← 罗盘与时间栏
+              shaders/          dome star line sun moon sky_projection
+              data/             catalog.txt vsop87b.dat SOURCES.md
 ```
-
-`.tmp/` 下三个目录都是**临时**件（`.tmp/*` 不进 git，用完即删）：`tools/` 是 PS 脚本（窗口几何 / 逐屏截屏 / 最小化后截屏 /
-PostMessage 点击 / 杀进程 / 显示器列表），`tests/` 现在只剩用户给的参照场景 `sample.tscn`（`SphereMesh` + y=0 的 `PlaneMesh`
-+ `Camera3D` fov 110，`sky_view.tscn` 与它同格式），`shots/` 是 `--shot` 的落点。**引擎也不进 `.tmp/tools/`**（用户要求），
-用装好的编辑器版，路径见「环境与工具链」。**要长期留下的东西不放这里**，放它所属的那个目录：天球 → 屏的投影那条常驻探针
-就在 `backgrounds/sky/projection_probe.gd`（20 条，`--headless --script` 跑，退出码＝失败行数，判据见「验证」）。
 
 ### 切换流程
 
@@ -210,63 +178,26 @@ switch_to(id):
   if id == current: return
   old.teardown(); await old.tree_exited        # 显式释放，避免残留 GPU 资源
   new.build(self); add_child(new)
-  hud_slot.replace(new.build_hud())
-  hud_window.size = new.hud_size()
-  apply new.vignette_shader()
-  renderer.set_policy(new.render_policy())
+  hud_slot.replace(new.build_hud());  hud_window.size = new.hud_size()
+  apply new.vignette_shader();  renderer.set_policy(new.render_policy())
   用 vignette 做 ~200ms 淡入淡出盖住空白帧
 ```
 
-### HUD 分层
+### HUD 与菜单
 
-```
-HudWindow (shell：Window 壳，无工具条、无粘在角上的第二扇窗)
-└── content_slot : Control                        ← 背景自带，切换时整体替换
-      水族箱 → CPU/内存/显卡/显存/温度/网络/帧率 + 折线（280×280，无时钟列）
-      星空   → 罗盘（四角：上 ↙/↘ 转向；左下 星座/星宿 开关 + 壳放的 桌面；右下 时辰−/时辰+/现在，上面一颗 >> 换步长；盘外视角弧；奇门八分盘）
-             + 时间栏（三元九运·道历日期 / 四柱·节气三元·阴阳局 + 现在）
+- HUD 窗壳只管拖动/穿透/退出，内容 `content_slot` 由背景提供、切换时整体替换。默认落在可用区右上角（右边 26、顶边 100），
+  只有**第一次** `set_content()` 摆它，此后窗口待在用户拖到的位置。
+- 菜单：托盘只放得下一枚图标和一次点击回调，**装不下别人的窗口**，所以菜单是 `host.exe` 自己画的 Win32 弹出菜单，
+  客户端只提供内容（图标 `tray.rc` + `xuandesk.ico` 用 `windres` 编进 exe；承载窗是类名 `XuanDeskTray` 的隐藏顶层窗口；
+  注册 `TaskbarCreated` 让 Explorer 重启后重挂）。弹菜单时每次现建，点了以后**只发一条事件**（`menu background <id>` 等），
+  走与热键同一条通道——**托盘是第二个键盘，不是第二个脑子**，状态仍然只有客户端一份。
+  行：`换桌面 ▸`（背景注册表）、`显示器 ▸`（只在有两块以上时画）、`穿透`、`桌面`（隐显壁纸窗）、`面板`（隐显 HUD 窗）、`退出`；
+  `桌面` 行随桌面层本身（`--wallpaper=0` 时不画，那颗开关是空操作），`面板` 行随 HUD 窗（`--hud=0` 时不画）。
+- Win11 默认把新图标塞进任务栏溢出区，第一次要用户自己拖到可见区（不替用户改别人的机器）。
 
-托盘（host.exe 的通知区图标：菜单，2026-10-13 起）
-└── 换桌面（子菜单）/ 显示器（子菜单，多屏才有）/ ─── / 穿透 / 桌面 / ─── / 退出
-      （`桌面` 只在**没给座的背景**上出现、且 `--wallpaper=0` 时整行不画）
-```
+### 指标流（`host.exe` → Godot）
 
-`[桌面]` 不是"隐藏 HUD"（那个功能去掉了）：它 **显隐 3D 桌面本身**（壁纸窗口），
-因为壁纸层是唯一会被系统自己的壁纸盖掉的东西，也是唯一"藏起来再放出来"能逼它重画一帧的东西。
-
-壳的钮与背景内容**不在一个窗口里**——这句话说的是从前：菜单曾是壳的第二扇 OS 窗口，粘在 HUD 右上角
-（G13 `z_index` 管画 / G28 树序管点那对坑讲的都是更旧的工具条）。**2026-10-13 起菜单整个不在我们这边了**：
-它是 Windows 系统绘制的托盘弹出菜单，HUD 只剩 `content_slot` 这一个子节点。
-
-**窗口默认落点**（`HudWindow._default_position()`，2026-10-14 用户："改HUD默认距屏顶100"）：可用区的右上角，
-**右边留 `MARGIN = 26`、顶边留 `TOP_MARGIN = 100`**（顶边原本和右边共用 26）。只有**第一次**
-`set_content()` 会摆它，此后窗口待在用户拖到的位置，切换背景也不会把它挪回去。
-
-### 菜单：通知区图标 + Win32 弹出菜单（2026-10-13）
-
-用户："菜单能不能改到 windows 任务栏右下角里?"——能，但**不是把那个窗口搬过去**：托盘只放得下
-一枚图标和一次点击回调，**装不下别人的窗口**（系统没有这种接口，Godot 的 `DisplayServer` 也没有托盘 API）。
-所以菜单变成 `host.exe` 自己画的原生弹出菜单，客户端只提供内容：
-
-- **图标**：`native/tray.rc` + `native/xuandesk.ico`（16/20/24/32/40/48/64 七档，由 `icon.svg` 位图化而来），
-  用 `windres` 编进 `bin/host.exe` 的 `.rsrc`，运行时 `LoadIconW(hinst, MAKEINTRESOURCEW(1))` 取——
-  **exe 自带图标，运行时不去找文件**（导出的包里也不用额外拷文件）。
-- **承载窗口**：类名 `XuanDeskTray` 的**隐藏顶层窗口**（不是 message-only 窗）。`TrackPopupMenu` 要求承载窗
-  能成为前台窗口，否则**点菜单外面它不收起**；配套的两步是 `SetForegroundWindow(hwnd)` + 菜单关掉后
-  `PostMessage(hwnd, WM_NULL, 0, 0)`（少了它下一次开菜单会被吞掉）。左右键都开菜单。
-- **Explorer 重启**：图标会跟着没，所以注册了 `TaskbarCreated` 消息，收到就重挂一次。
-- **行与勾选**：来自客户端推的模型（上一节那 5 条 `menu …`）；`桌面` 那一行的钩是宿主自己的 `g_wall_shown`。
-  弹菜单时**每次现建**（不留 HMENU 状态），`TrackPopupMenuEx(TPM_RETURNCMD)` 拿回被点的行号。
-- **点了以后**：不自己动手，发一条事件（`menu background <id>` 等）走和热键同一条通道——
-  **托盘是第二个键盘，不是第二个脑子**，状态仍然只有客户端一份。
-- **Win11 默认把新图标塞进溢出区**（任务栏那个 `^`）：实测 `HKCU\Control Panel\NotifyIconSettings`
-  里我们那条（`ExecutablePath=E:\xuandesk\bin\host.exe`）`IsPromoted` 是**空**，所以第一次要用户自己
-  把它拖到可见区。**我们不替他改**（那等于改别人的机器，同 §2.1 W7 那条规矩）；`IsPromoted=1` 是
-  用户自己愿意时的手工一步。
-
-指标流**永远开启**（host.exe 同时负责壁纸挂载与热键）；星空 HUD 不消费它即可，成本 1 Hz 可忽略。
-
-**指标流协议**（`host.exe` → Godot，127.0.0.1 回环 TCP，换行分隔 JSON，默认 1 Hz）：
+127.0.0.1 回环 TCP、换行分隔 JSON、默认 1 Hz，**永远开启**（星空不消费也不亏，成本 1 Hz）：
 
 ```json
 {"seq":12,"cpu":29.4,"mem_used":33285996544,"mem_total":68327845888,
@@ -274,54 +205,25 @@ HudWindow (shell：Window 壳，无工具条、无粘在角上的第二扇窗)
  "net_rx":134000,"net_tx":110000,"up":245,"wall":"ok","ev":["toggle_desktop"]}
 ```
 
-| 字段 | 含义 |
-|---|---|
-| `cpu` | 全核占用 %（`GetSystemTimes` 差值） |
-| `mem_used/mem_total` | 字节（`GlobalMemoryStatusEx`） |
-| `gpu/vram_used/vram_total/gpu_temp` | NVML；**无 `nvml.dll` 时 `gpu=-1`、`vram_total=0`** |
-| `net_rx/net_tx` | 字节/秒（`GetIfTable2` 差值，排除回环） |
-| `up` | host 运行秒数 |
-| `wall` | 壁纸状态：`ok` / `off` / `waiting` / `no-worker` / `hidden`（含"用户按桌面钮藏起来的"）/ `failed` |
-| `screens` / `screen` | 宿主枚举到的显示器列表（主屏恒 0 号，其余按 x 排序）与当前选中的那块 —— 托盘的 `显示器` 子菜单读它 |
-| `ev` | 事件数组（由热键或托盘的某一行产生，见下表） |
+字段：`cpu`（全核 %，`GetSystemTimes` 差值）、`mem_used/mem_total`（字节）、`gpu/vram_*/gpu_temp`（NVML；无 `nvml.dll` 时 `gpu=-1`）、
+`net_rx/net_tx`（字节/秒，排除回环）、`up`（宿主运行秒数）、`wall`（壁纸状态 `ok/off/waiting/no-worker/hidden/failed`）、
+`screens`/`screen`（显示器列表与当前那块，托盘的 `显示器` 读它）、`ev`（事件数组）。
 
-事件（`ev` 里的字符串，`shell/main.gd` 与 `shell/hud_window.gd` 各收自己那几条）：
-
-| 事件 | 谁发的 | 谁答 |
-|---|---|---|
-| `toggle_desktop` | `Ctrl+Alt+H` / 托盘 `桌面` | shell（`_toggle_desktop`） |
-| `toggle_clickthrough` | `Ctrl+Alt+T` / 托盘 `穿透` | HUD（`_toggle_lock`） |
-| `quit` | `Ctrl+Alt+Q` / 托盘 `退出` | HUD → shell（`_quit`） |
-| `menu background <id>` | 托盘 `换桌面` 的某一行（id 原样带回来） | shell（`_on_background_selected`） |
-| `menu screen <n>` | 托盘 `显示器` 的某一行 | shell（`_on_screen_selected`） |
-
-反方向是**模型的**（客户端 → 宿主，同一条 socket 上的文本行，`host.c::handle_command`）：
-`menu reset` / `menu bg <i> <cur> <id> <label>` / `menu screen <i> <cur> <label>` / `menu desk 0|1` /
-`menu locked 0|1`。每次状态一变就**整份重发**（几百字节，回环），宿主不猜：标签与勾选都由客户端
-（`shell/main.gd::_push_tray_model`）说了算，宿主只管画。
-
-**反向通道**（Godot → host，同一 socket 的裸文本行）：`quit`（退出前）、**`wall 0|1`**（显隐 3D 桌面）、
-**`screen <n>`**（把壁纸窗口搬到第 n 块屏）、**`lock 0|1`**（HUD 是否鼠标穿透，G40）与上面那一族 `menu …`。
-它们都走 `MetricsClient.send_command()`；`wall` 只在 `--wallpaper=1` 时执行——`--wallpaper=0` 时那个窗口
-只是普通窗口（托盘的 `桌面` 那一行也随之不画）。**这三条"宿主侧状态"的旗都要在链路起来时重发**
-（`shell/main.gd::_on_host_online`）：重新生出来的宿主是全新的进程，`wall`/`screen`/`lock` 三个旗它都不知道。
-
-**两条命令粘在一个 recv 里不会丢**（2026-10-13 修）：宿主以前拿 `strncmp` 比 recv 缓冲区的**头**，
-而客户端在链路刚起来时会连着发 `wall 1` 与 `screen 0`——TCP 一粘包就只剩第一条生效。现在宿主自己
-按 `\n` 切行（`host.c::read_commands`，4096 字节的行缓冲），托盘的整份模型也才放得下。
-
-TCP 角色：**Godot 是服务端**（bind 127.0.0.1:0 取临时端口），host 是客户端（带重试）。
-host 在 socket 对端消失时自退，因此**永远不会比它的客户端活得久**。
+事件（`ev` 里的字符串，热键与托盘那几行都走它）：`toggle_desktop` / `toggle_panel` / `toggle_clickthrough` / `quit` / `menu background <id>` / `menu screen <n>`。
+反向通道（Godot → host，同一 socket 的裸文本行）：`quit`、`wall 0|1`、`screen <n>`、`lock 0|1`、`hud 0|1` 与一族 `menu …`（模型整份重发，宿主只管画）。
+宿主按 `\n` 切行，两条命令粘在一个 recv 里也不会丢。Godot 是服务端（bind 127.0.0.1:0），host 是客户端（对端消失即自退）；
+`wall`/`screen`/`lock`/`hud` 这四个宿主侧状态旗在链路起来时要重发。
 
 ---
 
 ## 背景一：水族箱
 
 - `aquarium.gd` 程序化建场：水箱 9.0×3.4×5.0，相机在水箱内（FOV 66）缓慢漂移，`_process` 驱动 boids。
-- 沙床（噪声丘 + 焦散）、石壁背景、礁石 ×10、水草 2 组 MultiMesh（约 600 叶）、水面（Gerstner 波 + 水下菲涅尔）、玻璃 4 面（掠射角反射而非透出黑房）、框架 + 灯带、气泡 + 海雪 GPUParticles3D。
-- 鱼 3 种 × MultiMesh：程序化网格（lathe 体 + 尾/背/臀/胸鳍 + 眼），`fish_school.gd` boids（聚/散/对齐 + 边界 + 障碍规避）。
-- 关键参数：水下体积雾、ACES、`tonemap_white=4.8`、`ambient 0.40`、`ssao_intensity=1.0`；焦散 `caustic_scale` 沙 2.2 / 石 2.0 / 壁 1.5（**尺度必须匹配场景尺寸**，用 0.3 时整屏一片死 flat）。
-- 渲染策略 `CONTINUOUS`（鱼一直在游），所以它**不会**踩到 G36 那类"窗口被搬动后不再画"的坑——也因此**不能用它去验证**只在 `ON_DEMAND` 上才出现的问题。
+- 沙床（噪声丘 + 焦散）、石壁、礁石 ×10、水草 MultiMesh、水面（Gerstner + 水下菲涅尔）、玻璃四面（掠射角反射）、
+  框架与灯带、气泡与海雪 GPUParticles3D；水下体积雾 + ACES（`tonemap_white=4.8`）。
+- 鱼 3 种 × MultiMesh（程序化网格），`fish_school.gd` boids（聚/散/对齐 + 边界 + 障碍规避）。
+- 焦散尺度必须匹配场景尺寸（用小值整屏一片死 flat）。
+- 渲染策略 `CONTINUOUS`（鱼一直在游）——因此**不能拿它去验证**只在 `ON_DEMAND` 上才出现的问题。
 
 ---
 
@@ -329,295 +231,109 @@ host 在 socket 对端消失时自退，因此**永远不会比它的客户端�
 
 ### 复用清单
 
-**复用本工程（壳）**：`host.exe` 壁纸挂载与热键、`hud_window.gd` 窗壳、`metrics.gd`、`args.gd`、`shots.gd`、`run.bat`、`.tmp/tools/*`。
-
-**复用 `E:/lingwang/Scenes/Features/QimenSLG/compass/`**：
-
-| 资产 | 用途 |
-|---|---|
-| `compass_line.gdshader` | **屏幕空间恒定 1px 发丝线**（`fwidth` 距离场裁线宽，缩放不变粗不断线）→ 环界圆/分格线/天球坐标网格 |
-| `compass_3d.gd` 环层系统 | 环带 ArrayMesh + 显式 `render_priority` 分层（半透不写深度，**必须显式定序**）+ `Label3D` 平铺盘面、字头朝圆心、`pixel_size=0.15` 高分辨率字模 |
-| `moon_lit_polygon()` | 月相亮面几何（外缘半圆 + 终结线半椭圆），亮侧朝日 |
-| 换字飞转 | 同位不动 / 相邻同心转 / 跨位直线飞（**已移植**：`hud_compass.gd` 的 `_plate`/`_retarget`/`_entry_now`，2026-10-13，见 `计划.md`「换字飞转」）。`anim_started|finished` **没有跟着搬**：那套是给"和 3D 天空同处一个场景的盘"切逐帧渲染用的，这张卡独占 HUD 窗，飞转花的是它自己的帧 |
-| `compass_view.gd` | **HUD 交互范式**：`SubViewportContainer + SubViewport + 正交相机`、时间栏、拖动/滚轮/双指捏合、按需渲染（`UPDATE_ONCE` ↔ `WHEN_VISIBLE`） |
-| `compass_data.gd` 时间基元 | `clock/now/display/days_in_month/shift_shichen|day|month|year`、`julian_day()`、`moon_elongation_deg()`、`phase_name()` |
-| `CalendarUtil.get_ganzhi_info()` | 干支四柱 + 节气 + 农历日 |
-| 配色 | `COL_DISC` 深蓝墨 / `BAND_COLORS` 半透蓝 / `COL_LINE` 浅蓝 / 金 / 青 |
-
-> **必须重做**：lingwang 的天文模型是**盘面语义不是天象**——`sun_angle_at = (时−12)·15°` 是平太阳时角、与日期无关，`sun_angle_raw` 还把日期整圈取模抹掉。星空必须换真模型（见「天文算法」），否则星座位置全错。
+- **本工程（壳）**：`host.exe` 的壁纸挂载与热键、`hud_window.gd` 窗壳、`metrics.gd`、`args.gd`、`shots.gd`、`run.bat`。
+- **lingwang `compass/`**：`compass_line.gdshader`（屏幕空间恒定 1px 发丝线）、环层系统（ArrayMesh + 显式 `render_priority`）、
+  `moon_lit_polygon()`、换字飞转、`compass_view.gd` 的 HUD 交互范式、`compass_data.gd` 的时间基元、`CalendarUtil.get_ganzhi_info()`、配色。
+- **必须重做的是天文**：lingwang 的太阳是"平太阳时角、与日期无关"的**盘面语义**，不是天象；星空换真模型。
 
 ### 天文算法（全部本地计算，无网络）
 
 ```
-JD       = julian_day(y,m,d,h,min)                        # 复用 lingwang
-T        = (JD − 2451545.0) / 36525
 GMST(°)  = 280.46061837 + 360.98564736629·(JD−2451545) + 0.000387933·T² − T³/38710000
-LST(°)   = GMST + λ_east
-H        = LST − RA
+LST(°)   = GMST + λ_east ;  H = LST − RA
 sin h    = sinφ·sinδ + cosφ·cosδ·cosH
 A        = atan2(−cosδ·sinH, sinδ·cosφ − cosδ·sinφ·cosH)   # 自北起，向东为正
 ε        = 23.4392911 − 0.0130042·T − 1.64e−7·T² + 5.04e−7·T³
-太阳 λ    = L0 + C                       (Meeus 25)
-月亮      = Meeus 47 主项
-行星      = JPL 近似开普勒根数 → 日心黄道 → 减地球 → 光行时迭代 1 次 → 地心赤道
-           （**木星/土星例外**：这两行改用 VSOP87B 级数，见下「数据源」——直线速率的根数跟不上 5:2 共振）
+太阳      = Meeus 25；月亮 = Meeus 47 主项；行星 = JPL 近似开普勒根数（木土改 VSOP87B）
 岁差      = IAU 1976/2006 三欧拉角 → 天球节点一次旋转
-蒙气差 R  = 1.02 / tan(h + 10.3/(h+5.11))  角分 (Bennett)   # 只用于黄道/地平的口径换算
-月相      = fposmod(λ_moon − λ_sun, 360°)
+蒙气差 R  = 1.02 / tan(h + 10.3/(h+5.11)) 角分 (Bennett)   # 只用于黄道/地平的口径换算
+白道      = 真黄经取 120 点；月相 = fposmod(λ_moon − λ_sun, 360°)
 ```
 
-**天球做成一个可旋转 `Node3D`（`SkyRoot`）**：恒星/星座/银河/宿度全部静止于天球，
-时间变化只需 `basis = R_precess(T) · R_lst(LST) · R_lat(φ)` **一次旋转**，不逐星重算。
-日月行星挂 `SkyRoot` 兄弟节点，按当日赤道坐标摆位，仅时间变更时重算。
+天球做成一个可旋转 `Node3D`（`SkyRoot`）：恒星/星座/银河/宿度全部静止于天球，时间变化只需
+`basis = R_precess(T) · R_lst(LST) · R_lat(φ)` **一次旋转**；日月行星挂兄弟节点，时间变更时重算赤道坐标。
 
 ### 数据源与许可
 
-| 数据 | 源 | 许可（已核对） |
-|---|---|---|
-| 恒星 | **Yale BSC5** `cdsarc…/V/50/catalog.gz`（9110 颗 ≤6.5 等，定宽文本） | 公有领域 ✅ |
-| 恒星/连线/边界（备选 JSON） | `d3-celestial/data/{stars.6,constellations.lines,constellations.bounds}.json` | 仓库 LICENSE = **BSD-3-Clause** ✅；但上游 README **未声明数据溯源** ⚠ |
-| 中文名 | 自建 `data/zh_names.json`（88 星座 + ~120 亮星 + 28 宿） | 自撰 ✅ |
-| 行星历表 | JPL SSD "Approximate Positions of the Planets" | NASA 公有领域 ✅ |
-| 木星/土星历表 | **VSOP87B** `cdsarc…/VI/81/VSOP87B.{jup,sat}`（截断到 A ≥ 1e-6 rad → 40 KB，见 `backgrounds/sky/data/SOURCES.md`） | 公开天文数据（Bureau des Longitudes / IMCCE） ✅ |
-| 太阳/月亮 | Meeus 第 25/47 章，自写实现 | 公式无版权 ✅ |
-
-> **红线**：d3-celestial 的星座连线/边界在确认数据溯源前**只用做对照、不进仓库**；默认路径是 BSC5 + 自建连线。
-> 落地时在 `data/SOURCES.md` 记「URL + 许可 + 获取日期」。星表目录放 `.gdignore`（同 G12）。
-> `constellations.gd` 的连线就是按这条红线**自己重排**的（形状照传统图形，对照用的那份 JSON **只读不存**），
-> 仓库里落下的仍然只是"拜耳字母/弗氏号 → 拜耳字母/弗氏号"的对照表，没有坐标、没有第三方文件（见 G31）。
+- 恒星：**Yale BSC5**（9110 条定宽记录，**9096 颗**有位置与 V 星等 ≤6.5，公有领域；其余 14 条是星表自己置空的撤档条目，解析时跳过）。
+  中文名：自建 —— 9096 颗里 **882 颗**有名字（88 星座名 ＋ 28 宿名 ＋ 209 星官 947 条星名（873 颗互不相同）＋ 北极星 ＋ 斗的八颗 ＋ 廿四节气名；2026-10-15 探针实测）。
+- 行星：JPL SSD 近似根数（公有领域）；**木星/土星**改用 VSOP87B 级数（5:2 共振，直线速率的根数跟不上）。
+- 太阳/月亮：Meeus 25/47 自写实现（公式无版权）。
+- **红线**：d3-celestial 的星座连线虽然仓库许可是 BSD-3，但上游**未声明数据溯源**，只作对照、不进仓库；
+  落地时在 `backgrounds/sky/data/SOURCES.md` 记「URL + 许可 + 获取日期」，星表目录放 `.gdignore`（G12）。
 
 ### 星点、记号与取舍
 
-**投影**：`projection.gd` 与 `shaders/sky_projection.gdshaderinc` 共写**一张按方向的网格**（下面四支），屏幕位置 =「方向在天上的角度」→「画上的像素」，
-两边**必须逐像素一致**：天球本身由 shader 画（`POSITION = SKY_CLIP(…)` 覆盖引擎的 modelview·projection，深度仍按「顶点到相机的距离」走），
-而**名字层、两条地支环、日月盘、七行星标记、白道**这些 2D 的东西是 `SkyProjection.screen_point()` 摆上去的——两边不一致就是"名字飘在别处"（第七轮真的发生过，见下）。
-**离球心的网格**（日月盘、七行星标记）另要 `SkyProjection.keep_visible()`：画幅可能比镜头 frustum 宽（默认这一支画幅的边离轴 **85.3°**、四角 **97.9°**，相机自己那张 gnomonic 的边只有 **63.1°**；`pan`/`cylinder` 按它们自己的 100° 开起来也是 89°），离轴那一圈的天体**在画上却在 frustum 外**，不加这一句会被剔掉。
-**`lens` 那一支没有映射**：它就是 `projection * view`（引擎自己的矩阵），`SkyProjection` 那一侧走的也是**同一台相机的投影矩阵**，所以那一支上 CPU 与 shader 是同一个变换、不是两张要互相对齐的图。
+- **投影**：`projection.gd` 与 `shaders/sky_projection.gdshaderinc` 共用**一张**"方向 → 像素"的网格，两边必须逐像素一致——
+  天球本身由 shader 画，而名字层、两条地支环、日月盘、行星标记、白道这些 2D 的东西由 `SkyProjection.screen_point()` 摆；
+  不一致就是"名字飘在别处"。离球心的网格另要 `keep_visible()`：画幅比相机 frustum 宽，画上的天体会被剔掉。
+  `lens` 那一支没有映射，CPU 与 shader 用同一台相机的矩阵。
+- **默认 = 鱼眼（等距方位，极点就在视轴上）**：径向一 Degree 就是一 Degree 的像素，画幅里**没有比中心更大的尺度**。
+  代价两条：地平线是**弧**，北极星在朝南的画幅外（要看"以北极星为中心转"就把视轴转向北 `--sky-view=0,40`）。
+- 四支的取舍（开场 2560×1440、正南 42.5°、fov 96；"尺度"＝相对画幅中心的最大倍数）：
 
-**默认＝鱼眼（等距方位投影，极点就在视轴上），开场「正南、上抬 42.5°、fov 96」＝从整体里截一段（2026-10-14）**：天球还是**一颗真的球**——星点钉在半径 480 的球面上、穹顶 500，
-**一台普通的 `Camera3D`** 站在球心（`--sky-view` 给方位/高度，默认 180°,42.5°）；`sky_map == 3`（`--sky-map=fisheye`）把每个顶点按**它离视轴的角度**、以**一个常数尺度**铺成画幅半径——
-**径向一 Degree 就是一 Degree 的像素**（96° 画幅 ⇒ **15.00 px/°**），画幅里**没有比中心更大的尺度**；视轴 42.5° ＋ 半视场 48°＝**90.5°**，画幅上沿因此跨过天顶半度、天顶那点落进顶边内侧 **7.5 px**（35°/80 那一档把它甩在顶边上方 270 px＝0.19 个画幅，那一档的十字根本没画出来；2026-10-14 用户「能不能压一下让他在屏顶露个头，并标个淡白色虚十字」——同一轮里这一档又从 44°/93 挪到 **42.5°/96**，用户「桌面任务栏以上,地平线以下要露一个字的高度」：地平线那一条 = `(0.5 + 高度/fov) × 1440`＝**`90.5 × 1440 / fov`**，画幅最后 **48 px** 是任务栏（`CameraRig.TASKBAR`，可用区 0,0,2560×1392），所以「地平线以下露一个字」就是视场一个人的事）。
+| map | 中间尺度 | 最差尺度 | 转 10° 的残差 | 代价 |
+|---|---|---|---|---|
+| **`fisheye`（默认）** | 15.00 px/° | 1.52× | 3.38% | 地平线是弧 |
+| `lens` | 11.31 px/° | 4.40× | 58.14% | 四角按 `sec²` 放大 |
+| `pan` | 15.00 px/° | 1.49× | 43.20% | 两轴各一个常数尺度 |
+| `cylinder` | 15.00 px/° | 11.46× | 95.07% | 转方向 = 整片天平移 |
 
-**鱼眼那一轮（2026-10-14；开场那组「正南 35°、fov 80」就是它定的）**是用户同一天的两句话叠起来改判的：
-① 「当前中心正常，周围被拉伸放大，改用鱼眼/等距柱状投影 重新校正星空」——老默认 `lens` 是**真镜头**，镜头离轴处按 `sec²` 放大（80° 那一档四角 **3.95×**、110° 那一档 9.5×；本档 96° 是 **6.15×**），于是"中心正常、周围胀开"；
-② 「我要的是要从整体中截取东西南北天的部分显示，不是一直仰头正能天顶」——**视轴**从朝天顶改成**正南上抬 35°**、视场从 110 收到 **80**：画幅成了一扇开在**南天**上的窗（横 142.2° 方位），转方位 90° 就是东/西/北各自一片天，而不是"整盘天挪一挪"。
-两条验收还是用户那两句、只是写细了（2026-10-12 原话："同一时间我转方向,则星空绕天顶转,同一方向时间走动,则星空绕北极星转"；2026-10-14：**"1：时间固定，旋转视角，看东，北，西天，星间距不变，看到以天顶为中心旋转；2：视角固定，时间变动，应看到天空以北极星为中心旋转，星间距不变"**）：
-
-| 判据（开场：正南 42.5°、fov 96、2560×1440；探针逐条量 + 出图复核） | 量到的 |
-|---|---|
-| **尺度**（"周围被拉伸放大"的正解） | 天顶外各处**径向一律 15.000 px/°**（离轴 20°/45°/70° 三处都量到 15.000，精确值 15.000）；天球那一半**最差尺度 1.72×**（画幅四角——离轴 97.9°、还在地平以上 15.4°）、**形状拉伸 1.52×**（＝`rho/sin(rho)`：中心 1.00、地平线那一圈 1.571）。**同一张画幅上 `lens` 是 4.40× / 2.10×**（它自己角上 **6.15×**），这就是用户看到的那圈涨 |
-| **转视角＝绕天顶转** | 同一刻转 10°：每颗星到**天顶那一点**的距离变化 **≤3.38%**（`lens` 同取景 **58.14%**）；**出图复核**（35°/80 那一轮的两张图逐颗星找质心）：半径差 **2.45%**、绕天顶走 **7.1…9.8°**（10° 里差的那点就是 `rho/sin(rho)`，探针 CPU 侧量到的是同一个场）。视轴摆到天顶时这一条**精确到 0.00%** |
-| **看东/南/西/北各一片** | 横着 **170.7°** 方位（16:9；同一块板竖起来是 **54.0°**）：转 90° 就是另一片天；地平线在画幅 **0.943** 处、地面 **16.95%**，地支环骑在上面 |
-| **走时间＝绕北极星转** | 视角不动、+6 h（这一条把视轴转向北 `0,40`，让转轴落在画面里）：**北极星那颗只挪 16.03 px**（它离极 0.7°＝半径 12.6 px，四分之一圈最多带它 17.8 px），而离极一整圈外的一颗被带走 **1021 px**——整片天绕极转、枢轴不动。另一条量"间距"：视轴附近相距 2° 的两颗星走完 3/4 天（只统计两颗都在画幅里的采样——这一档窗口更宽，抓到 **8** 个采样、最远到**离轴 78.1°**，35/80 那一档是 7 个 / 65°）**间距变 39.06%**（`lens` 201.55%）——那是 `rho/sin(rho)` 在画幅里从 1.00 涨到 **1.72**，**径向全天精确** |
-| **CPU 与 shader 同一张图** | 六颗亮星的最亮像素质心与 `SkyProjection` 预测最差 **0.99 px**（球幕那一支当年差 648 px＝绕画面中心 180°，见下） |
-
-**为什么极点还在视轴上**：视轴朝哪，转方位就是绕**那根轴**转（摆到天顶时"绕正中那点刚性转"是字面事实；斜着看时是绕天顶那点转、残差就是上面那 3.38%）；极点跟着视轴走，所以**上下拖动 / 天顶按钮 / 滚轮缩放**全都还有效。
-代价两条：**地平线是曲线**（画幅下沿那条弧从中间到两侧升 **414 px**、画幅自己左沿 **546 px**——"平的地平线"与"绕天顶转"在同一张球面图上互斥，2026-10-12 就量过；视场开到 110°、视轴压到天顶那点正好卡在顶边上那一档是 430 px），**北极星那点在朝南的画幅外**（要看"以北极星为中心转"就把视轴转向北：`--sky-view=0,40`）。
-
-**地平线要「完全直」的两条路**（2026-10-14 用户：「地平线是弯的,能不能拉成直的」）：① `--sky-view=180,0`——鱼眼、视轴压到地平线上：地平线 **0 px 弯**（正是一条直线），径向尺度一点没变（15.00 px/°）；代价是地平线落在画幅正中（地面占一半）、转方向变成横向扫（一根直的竖轴等于把天顶推到无穷远，绕它的转就是平移）。出图 `.tmp/shots/fy_straight.png`。② `--sky-map=cylinder`——那支的地平线本来就直：**0 px 弯**，构图与默认**一模一样**（地平线 0.943H、地面 16.95%）；代价是画幅上部横向拉伸（本档 **11.46×**——视轴 42.5° 之后画幅上沿已经跨过天顶半度，`cylinder` 的极点那一行就顶在顶边内侧 **7.5 px** 上，横向拉伸到那儿发散）且转方向＝整片天横移。出图 `.tmp/shots/fy_cylinder.png`。
-**三件事不能同时要**：平的地平线 / 星间距不变 / 转视角＝绕天顶那点转——2026-10-12 就量过（上面那张四支表就是这笔账：`lens` 平但 `sec²` 4.4×，`cylinder` 平但天顶成一行且转是平移，鱼眼绕天顶精确但那一条线是弧）。
-**地平线的弯 ≈ 8 × 视轴高度**（px，fov 80 那一档实测，探针的「中轴那一点到画幅 5% 那列」口径：视轴 0°→**0**、10°→94、20°→186、25°→231、35°→**272**；同一口径下这一档（42.5°、fov 96）自己那条弧是 **414 px**、画幅自己左沿 546 px），而地面占比 = `0.5 − 视轴/视场`（那是**中轴那一列**的：这一档 `0.5 − 42.5/96`＝**5.7%**，按弧以下整片算面积才是 **16.95%**）：想让弧小就得把视轴压低，压低就多露地面——两个旋钮（`--sky-view` 的高度、`--sky-fov`）在用户手里。
-
-**取景档位的实拍对比**（同一瞬刻、只换视轴/视场；**这一轮定下的默认是 `frame_96_42.5.png` 那一档**）：`.tmp/shots/view_25_70.png`（更窄：地平线几乎平、天顶不在画幅里）、`.tmp/shots/frame_96_42.5.png`（**默认** 42.5°,96°：地平线 414 px 的弧、地面 16.95%、天顶那点探进顶边 7.5 px）、`.tmp/shots/frame_93_44.png`（**同一天前半的默认** 44°,93°：地平线 406 px 的弧、地面 13.75%；半尺寸 `.tmp/shots/view_93_small.png`）、`.tmp/shots/fy_open.png`（**上一轮的默认** 35°,80°：地平线 272 px 的弧、地面 13.8%）、`.tmp/shots/view_52_72.png`（用户画的那个框：天顶在顶边、地平线在画幅外）、`.tmp/shots/view_45_110.png`（最宽：地平线 589 px 的大弧、画幅又成了半片天）。
-
-**四支的取舍（探针 `_the_four_maps` 同一份数据，都在开场画幅 2560×1440、正南 42.5°、fov 96 上量）**：
-
-| map | 中间尺度 | 最差尺度 | 形状拉伸 | 转 10° 的残差（开场 / 朝天顶） | 一天的间距漂移 | 天顶→地平线 |
-|---|---|---|---|---|---|---|
-| **`fisheye`（默认）** | 15.00 px/° | **1.52×** | 1.52× | **3.38% / 0.00%** | 39.06% | 1350…1482（9%） |
-| `lens` | 11.31 px/° | 4.40× | 2.10× | 58.14% / 0.00% | 201.55% | 1302…2003（42%） |
-| `pan` | 15.00 px/° | 1.49× | 1.49× | 43.20% / 10.01% | 0.53% | 1350…1445（7%） |
-| `cylinder` | 15.00 px/° | 11.46× | 11.46× | 95.07% / 95.07% | 26.17% | 1350…1350（0%） |
-
-（"尺度"＝该图在它画到的那半边天上、最强方向相对**画幅中心**的最大倍数；"形状拉伸"＝同一个点上两个方向的尺度比（1.00＝不拉）；"转的残差"＝转 10° 后一颗星到天顶那点的距离变化；"一天的间距漂移"＝视轴附近相距 2° 的两颗星、只统计都在画幅里时走 3/4 天的间距变化。`cylinder` 的 95% 是"转方向＝整片天平移"，`pan` 的 43.20% 是"两轴角度各一个常数尺度"换来的。）
-
-出图（复现那几条）：`"$G" --path . --resolution 2560x1440 -- --shot=.tmp/shots/frame_96_42.5.png --shot-frames=150 --wallpaper=0 --hud=0 --background=sky --sky-time=2026-10-22T14:00:00 --sky-rate=0`
-（`--sky-time` **按 UTC 写**，见 G32；探针：`"$G" --headless --path . --script res://backgrounds/sky/projection_probe.gd`；出图那一侧的复核见「验证」表。）
-> **春分那天画上是"平"的，这是几何不是画错**：春分太阳走的就是**赤道**，赤道是**大圆**、过球心，`lens` 下必被投影成**一条直线**（当时实测：整天的 y 只差 **2 px**）。
-> 别的日子里太阳的周日圈是**小圆**，画上就是一段爬升。要把**春分**也画成"爬"，只有把竖直坐标换成**世界地平高度**（`cylinder`：爬/扫 0.28），代价是天顶被拉成一行。
-> **现在默认这一支**在开场取景下把它画成**一段弧**：赤道离天顶 40°（北京纬度），画幅里就是那圈弧——爬/扫 **0.04**（这一档是 97 px 的爬、2532 px 的扫；`lens` 在同一取景下 0.00，`pan` 0.04，`cylinder` 0.26）。
-> "太阳在爬"的本来读数是**太阳的高度**：把机位跟着太阳转，春分那天它在画上爬 **118 px**、夏至 **438 px**。
-
-> **地平线能看到几个地支**（用户几次问"地平线以下怎么只看到巳午未"）：同样的瞬刻，画幅里能看到几列**取决于方位跨度**——旧取景（朝天顶之外、fov 110）地平线那一行约 **158°** ⇒ **5 列（辰巳午未申）**；
-> 收到 100° ⇒ 约 108° ⇒ 3 列。**现在默认这一支**是「从整体里截一段」：画幅横着 **170.7°** 方位，地平线是它下沿那条升 **414 px** 的弧，地支沿弧分布、地面在弧下（16.95%）。**地平线那一条 = `(0.5 + 高度/fov) × 1440`＝`90.5 × 1440 / fov`，而画幅最后 48 px 被任务栏盖着**（`CameraRig.TASKBAR`，可用区 0,0,2560×1392，计划 A45），所以这一档的 fov 就是照「桌面任务栏以上、地平线以下要露一个字的高度」定的：地平线 **1357.5**、任务栏上沿 **1392**，中间 **34.5 px** 正好是地支那一个字的线盒（20 px）＋1 px 缝＝**1.68 个字**（`午` 那个记号画在 1358…1378，整个在栏上面；再下面粗一档的 方位 字（`南`，17 px 盒、约 1381…1398）被栏削掉约 6 px——**记下了，没改**，再收一档 fov 96.5 也能让开。出图 `.tmp/shots/bottom_marks.png`：底中 4×、画了任务栏那条红边）。要更宽就把 fov 开大（**110°** 那一档、视轴压到天顶那点正好卡在顶边上，那条弧升 430 px），要整圈就把视轴收到天顶。**这不是 fov 写错了，是"平的地平线"与"宽的方位"在同一张球面图上的取舍**（表就在上面）。
-
-**`lens` 与 `pan` 两支的代价**（旧取景量到的，留作对照）：`pan` 地平线朝两侧上翘 634 px、太阳贴着它走（早/午/晚落在 y 684 / 631 / 669，横向却扫 1950 px），"升"就被弯吃掉了；`lens` 平，但四角 9.5×。
-真 3D 镜头下"爬不爬"的读数是**太阳的高度**：固定机位下取决于**它的周日圈在画上是什么形状**（春分＝赤道＝大圆＝直线），跟着太阳转机位时画上的 y 差就是高度差（春分 **118 px**、夏至 **438 px**）。
-
-**CPU 与 shader 是不是同一张图：拿亮星当尺**（这条判据是球幕那一支留下的）。
-球幕那一支（`--sky-map=sphere`，2026-10-14 删）的 shader 一度把球画成**它自己算式的点反演**——同样的方向，CPU 说在 (1603, 354)、画上却在 **(954, 1085) = 绕画面中心 180°**；
-球被点反演之后**还是个球**，肉眼很难发现，露馅的是**"名字在 CPU 的位置、盘在反演的位置"**（名字层与日月盘是 CPU 摆的，球是 shader 画的）。
-修法是那一支按**取负**写（月盘质心与 CPU 预测从 648 px 收到 1.8 px），而**这条判据留在探针与验证表里**：现在默认这一支的量法是
-**六颗亮星**（HR 99 / 188 / 7557 河鼓二 / 8308 / 8728 / 8781）在开场出图上的**最亮像素质心**与 `SkyProjection` 预测比，**最差 0.99 px** ✓。
-
-**`backgrounds/sky/sky_view.tscn`**（2026-10-12，用户："我要在sky/下看到sample.tscn相同格式的tscn,用这个tscn实现,在SphereMesh上布上星星,用Camera3D看"）：
-和 `.tmp/tests/sample.tscn` **同一种格式**——`SkyView`(Node3D) + **`SkySphere`**（`MeshInstance3D`，挂着 `SphereMesh`（半径 500）与 `dome.gdshader` 的 `ShaderMaterial`）+ **`Camera3D`**（在球心、正南上抬 42.5°、fov 96），**节点都在文件里**。
-底下跑的是壁纸自己的代码：`StarField` 把星表的 9096 颗星**钉在这张 SphereMesh 上**、`Astro.sky_basis` 把球转到那一刻、`SkySun` 挂在这颗球上，
-投影与取景与壁纸**同一套默认**（`SkyProjection.Map.FISHEYE`，相机在球心、正南 42.5°、fov 96；`sky_view.gd` 与 `sky.gd` 读同一个 `--sky-map`、同一套默认）。跑：
-
-```
-"$G" --path . res://backgrounds/sky/sky_view.tscn -- --shot=.tmp/shots/fy_view.png --sky-time=2026-10-22T14:00:00
-```
-
-判据：球上有星、地平线那条弧与地面（16.95%）的位置与壁纸同图——CPU 与 GPU 同图那条用亮星当尺（默认这一支实测 **0.99 px**，见上）。
-**编辑器里打开它是"球 + 相机"这两三颗节点**（星星是运行时布上去的），要跑（F6）才看得见。
-一个坑记在这儿：**`sky_map` 是全局 uniform，场景自己必须注册并设值**——没设的话着色器读 0（＝`pan` 那支），于是球画的是那张网格而 CPU 侧按另一张摆名字（这一版第一稿就是这样，出图里地平线弯了 675 px）。
-
-**`dome`（等距方位、极点钉在天顶那一支）与球幕那一支都已删**：它们的着色器侧与 CPU 侧同样不是同一张图，而且极点不跟视轴、俯仰与缩放全是死的；**判据**：任何新的一支先拿亮星核到 ≤3 px 再当默认（2026-10-14 的鱼眼这一支：**0.77 px**）。
-
-**星点**：星等 → 尺寸/亮度是一根**刻意压缩**的感知斜坡（`star_size = lerp(0.8, 2.8, norm^0.55)`、
-`star_brightness = 0.06 + 1.15·norm^1.6`、`norm = (6.5−V)/8`），**不是** Pogson 的能量比——
-线性的真实比值会让人眼觉得"只有几颗星"；`V>6.5` 的钳到地板（与 6.5 等一样大一样亮）。颜色取 B−V。
-**银河**是银道坐标里的一条高斯带（带内/带外 + 银心方向的凸起都由 shader 参数定），不是一张贴图。
-**地平以下是三层半透的地面，银河从那三层里透出来**（2026-10-14 用户三句话叠起来定的：先「地平线下的黑色没挡住银河，好象层次不对」，
-再「地平线下的黑调成半透 … 分个三层透度,代表三层纬度,每层变暗1/4」，看过第一版的三层硬边之后再补一句「三层间改成渐变」）。
-带是**加**在天球那一层的色上，而银道有一半永远在地平以下，掩掉之前那就是"地面上还画着银河"——银心过中天 4.7 h 后那一段整个落到画幅下沿，
-同机位减图量到地面上被加上的那部分**最大 81.5/255**（那片地面自己 3.5…8/255，即最多 20 倍以上），影响 **13.9 万像素**（>10/255）。
-现在地面不是一块黑板，是**半透膜**：按**地平纬度切三层**（`ground_span` **6°/层**、`ground_step` 每层再挡 **1/4** ⇒ 透度 0.75 / 0.50 / 0.25），
-**层与层的接缝是渐变**（`ground_blend` **0.75°**：两条缝各按 ±0.75° 的 smoothstep 摊开；把这一档开到半个层宽 3°，平台就没了、整条成一道连续斜坡），
-天球自己的内容——那段夜空渐变与银河——在三层下面继续、被**逐层压暗**（不是切掉）；**星点透不过来**：点光经不起一点雾，它们仍吃自己那条 2° 地平蒙版，
-所以这一条只对银河与天光成立。6° 这一档是照**画幅**选的：开场那一帧（42.5°/96°）的地面是 **0…-26.8°**（两下角最深、底边正中 -5.5°，画幅上面两个角还留着 15.4° 的天），三层 6° 一直铺到 -18°，两下角再往下那几度落在第三层以下那一档；
-视轴压到地平线上（`--sky-view=180,0`，地面到 -40°）第三层以下就是常驻的那一档。
-判据三条：① 地平以上**一点没动**（改前改后同机位减图 ≤0.99/255＝星点闪烁的噪声底）；② 三层在图上量得到——同一列（x=2450）的亮度在 **-6.6° / -12.8°** 两处各掉一级（55→45→35→25→12，级差就是那 1/4），而且各平台的值**逐像素没动**；
-③ 缝是渐变不是边——同一列的**逐行跳变**从硬边那版的 **-9.8 / -10.2 /255** 收到 **≤1.0/255**，过渡摊在 1.5° 上（地平线本身仍是硬边：那是地面的外沿，不在这三层的账里）。
-出图 `.tmp/shots/mw_before.png`（之前：银河整片压在地面上）/ `mw_steps.png`（三层硬边那一版）/ `mw_layers.png`（现在：三层渐变）、`mw_ground_ab.png`（三张的地面区拼成一张，上→下＝之前 / 硬边 / 渐变）。
-
-**昼夜**：白天**不关星**——`DAY_STAR_FLOOR = 0.65`（星点/图线/黄道），银河单独 `DAY_BAND_FLOOR = 0.10`
-（弥散带留 0.65 会变成一堵发光的墙）。尺度：2° 的地平淡出（mass extinction）代替大气消光，**不做**蒙气差，
-那两样在这一层的收益远小于它们引入的分歧（「天文算法」里那条 Bennett 公式只用于口径换算）。
-
-**月球**：盘面是**一颗被太阳照亮的球**（`moon.gd` + `moon.gdshader`，相位是真几何不是画的月牙），
-但半径**放大 3 倍**（`SkyMoon.MAGNIFY`）：真视半径 0.26° 在默认画幅（96° ⇒ 15.00 px/°）里只有 **3.9 px 半径**，是一颗点，
-而月球是天上唯一"有脸"的东西。**代价**：日食时它多挡太阳。
-**白道（月球自己的轨道）**：按**真黄经**取 120 点走完一圈（每点约 3 次 `Astro.moon_state()`，一次约 50 ms，
-**每天翻日重走一次**，与行星尾迹同一节奏），折进星表帧后是一条比黄道高/低 **5.1°** 的银灰细带——
-于是黄道与白道在月旁分开看得见。轨道挂 `SkyRoot` 而不是月球节点下：月球自身被缩放到盘面，
-挂成子节点会连盘面缩放一起继承。它随昼夜变暗、随视场缩放，**盘面不随昼夜变**（它是天体不是墨线）。
-**月不在画幅里就不画它**（2026-10-12，用户要求）：`SkyMoon.set_view()` 拿**天球投影的画幅矩形**判（`SkyProjection.in_frame()`，留一个盘面半径的余量），
-视角一变就跟着切——轨道是月球自己的线，月球不在那幅画里，线画着就是"报错了地方"。**判据不能是相机的 frustum**：`pan`/`cylinder`/`sphere` 这几种网格的画幅比镜头宽，
-`--sky-view=90,45` 那张图上月盘落在 (2214, 142)（在画上）、而 `is_position_in_frustum` 说**不在**——用 frustum 判就会"月亮还在画上、白道先没了"。
-（默认这一支画幅比 frustum 宽，两者并不重合——上面那条 `keep_visible()` 就是为它留的；判据仍是画幅，因为它对四种网格都对。）
-月盘本身不用判：`keep_visible()` 让 frustum 不再剔它。
-
-**标签**：**六类**都画在同一个 `SkyLabels` 上，2D 投影（`SkyProjection.screen_point()`，与天球顶点那五个 shader **同一张图**）、**恒定屏显字号**、只投画幅内且地平以上的对象、重叠即丢。
-摆位优先级 = **北极星 / 斗的八颗星 / 月（单点，丢了就没了；月抬高按盘面半径算，盘面放大后名字才不会压在月脸上）
-→ 行星名 → 宿名 → 廿四节气名 → 星官名 → 88 个星座名**（稀的先占位，密的让路）；
-行星排在两套分划之前是 2026-10-14 定的：七颗行星都**站在黄道上**，而黄道上现在有**二十四个**名字——节气名若还占单点那一档（2026-10-10 起是那样的），默认画幅里行星名会被整片吃掉。
-`星座` 开关只关最后一层，`星宿` 开关关的是**宿名 + 廿四节气名 + 星官名 + 斗的两个名字集**这一组
-（2026-10-12 第二十一轮：用户要"28 宿名只在星宿显示开时才显"、"北斗在星宿开关开时显示北斗九星的名字"；
-2026-10-14：用户要"二十四节气都显出，并改为仅星宿开关开时显"、"北斗星在星宿开关开时显贪狼武曲这套神名，关时显天枢天玑这套名"）。
-
-**三个记号**：
-- **北极星名字**：α UMi 从同一份 BSC5 查得（`find("α","UMi")`），名字写在它自己那个点上方，不另存坐标。
-- **北斗八星**（2026-10-12 第二十一轮，2026-10-14 改）：斗的八颗星**各自一个名字**，名字有**两套**，由 `星宿` 开关挑——
-  关时是**星名** `天枢 α / 天璇 β / 天玑 γ / 天权 δ / 玉衡 ε / 开阳 ζ / 摇光 η`，加**左辅**（Alcor，80 UMa，这份星表里没有拜耳字母，按**弗氏号** `find_flamsteed(80,"UMa")` 查）；
-  开时是**神名** `贪狼 / 巨门 / 禄存 / 文曲 / 廉贞 / 武曲 / 破军`，加左辅的 `洞明`（八白左辅的星君名；它的星名就是另一套里的"左辅"，所以八颗星一一对应，两套各八个名字）。
-  九星里的**右弼**传统上就叫"隐星"、天上没有对应的一颗，所以画出来的是**八个名字**（同一条规矩：星不在表里就不给它编位置，北极星缺失时同样只丢名不猜位）。
-  左辅离开阳 12′（开场画幅里 1.4 px），名字挂在星**下方**（`DIPPER_ATTENDANT_LIFT`）才不会和开阳挤成一团。
-  **没有"北斗"这个集名了**（2026-10-14）：它原来写在七颗星的像心、且只在 `星宿` 关着时出现（开着时让路给九星各自的字），而现在的关态也画星名——集名站的地方没了，删掉（`DIPPER_NAME` / `_dipper_direction()` / `DIPPER_SEVEN` 一并退休）。
-- **廿四节气**：**二十四个名字全画**（`Ecliptic.term_points`：λ = 15° 一格，名字读 `Ecliptic.TERMS`，**不另写一份名字表**），用 HUD 那支青色——与赤道那一带的**淡金/金**分开，因为**黄道 15° 等分**与**赤道 28 个不等分**是两套尺，同一个画幅里要能一眼分开。
-  它们走 `星宿` 开关（2026-10-14，用户："二十四节气都显出，并改为仅星宿开关开时显"）：`星宿` 关时**一个名字都不画**，而黄道大圆与那 24 根刻照旧留在天上（刻是天自己的，名字是读法）。
-  **不再画圈**（2026-10-12，用户要求："春分点不要画圈，再加秋分，夏至，冬至"）：四个点本来就各带一根中气刻，名字落在刻上，而岁差让这四个点是天球上的动点，画出来才看得见"分划是跟着它们走的"。
-  **刻只往一侧画**（2026-10-14，用户："黄道的节气分野线只会线上部分,下部分不画"）：`Ecliptic.build` 每根刻从 `point(jd, λ, 0.0)` 画到 `point(jd, λ, +reach)`（中气 **0.75°**、节令 **0.45°**），不再横跨那条大圆——**线以下一点不画**。屏上 λ 300 那两根从 **24.9 / 15.0 px 收到 12.6 / 7.6 px**（出图 `.tmp/shots/tick_term2.png`，2×）；**北在屏上永远是"上"那一侧**（开场这一档画幅里 24 个节气有 **13** 个在画上，反过来的 0 个——探针把这条钉住了），所以留的是北半边。像素佐证：`2026-10-14T14:00:00` 那一张（`.tmp/shots/frame_96_fixed.png`）上，每根刻从大圆往外到刻长为止都是墨、线以下全是纯天空。
-- **天赤道与分野**（2026-10-14，用户三句："天赤道用淡赤色"、"天赤道线上淡色标下星宿分野…用淡金色"、"星宿本体星组处用金色显名"）：赤道大圆画成**淡赤**（`EQUATOR_COLOUR`，线性加色，与黄道那支暖色分得开），28 根**距星刻**是这条带上标出来的**分野**、画成**淡金**（`MANSION_TICK_COLOUR`）——两者都**不**随 `星宿` 开关走（刻度是天自己的）；**分野刻短了**（2026-10-14，用户："天赤道的星宿分野线短一点"）：刻长从 `MANSION_TICK` 1.4° 改成**跟节气刻同一根尺** `Ecliptic.TICK_LONG`（0.75°，绑成一根而不是各写一个数）——ra 30 那根刻在屏上从 **45.7 px 收到 24.5 px**（渲染读回 24 px；出图 `.tmp/shots/tick_mansion2.png`，4×）。
-  每个宿的**名字**（`MANSION_COLOUR`，淡金、字号 13）站在**自己分野的中点**上、赤道线下方，**这才是这一层被 `星宿` 开关关掉的那部分**。
-  这是 2026-10-10「宿名落到星官上」那条的**另一半回来**（当时用户报告："分野用的星宿名位置，跟实际星宿的星群位置差好多"→ 宿名整体搬去星官）：现在**两边都有名字**——星官的名字（金色、字号 12）在星团自己身上，分野的名字（淡金）在赤道上，**靠颜色分开**（金＝星组，淡金＝赤道分划），所以同屏两个「危」各说各话、不再互相指错地方。
-- **星官名**：**金色**（`Color(1.00,0.84,0.45,0.85)`＝盘上 `C_DUTY` 那支金，`金` 在本工程只有一个意思），画在每个星官自己的锚点上（`MansionFigures.anchors()`：一条线的名字在那一坨星的中间），字号比宿名小一档。
-- **天顶虚十字**：4 条臂 ×3 段虚线的空心十字，**1 px、淡白**（`Color(1.00,1.00,1.00,0.45)`——2026-10-14 用户「标个淡白色虚十字」，此前是青色 `Color(0.42,0.88,1.00,0.60)`），锁在 **world 的 +Y**（不随天球转），是"天顶在哪"的唯一读数。**屏顶露的那个头**（用户同期「能不能压一下让他在屏顶露个头」）在默认这一档（42.5°/96°）落成这样：天顶那点在顶边内侧 **7.5 px**，横杠（两侧各三段）落在第 **7** 行（x 1263…1296）、下臂三段在 **11…13 / 16…18 / 21…23** 行、上臂只剩最里那一段（**0…2** 行）、其余被画幅切掉，墨读出来还是**白 0.45 压在天空上**的 `133,145,178`；**正好压在顶边第 0 行上的 1 px 线会被光栅化吃掉**（92° 那一档实测：横杠整条不出现、只剩下一段下臂），所以"露头"就得让画幅上沿跨过天顶半度（44/93 那一档的行号是 1…3 / 7 / 12…24，那张 6× 的 `.tmp/shots/cross_off93.png` 就是那一档的）。
-
-**滑行**：转向钮（`↙/↘` 与四个方位三角）走 `camera_rig.gd` 的 `1 − e^(−9·delta)`（沿短弧、连按累加、差 ≤0.02° 吸附）；
-时辰± 走 `timecore.gd` 的 `1 − e^(−7·delta)`（差 ≤1 s 吸附，**每帧发 `changed`**，所以整片星空看得见在转）。
-`face()` 与 `set_time_unix()`（拖动、`--sky-view`、`现在`）是"立刻到位"那条路。
+- **三件事不能同时要**：平的地平线 / 星间距不变 / 转视角＝绕天顶那点转。要"地平线完全直"只有两条路：
+  视轴压到地平线上（构图变成半地半天）、或 `--sky-map=cylinder`（天顶被拉成一行、转方向变平移）。
+- **星点**：星等 → 尺寸/亮度是一根**刻意压缩**的感知斜坡（不是 Pogson 能量比，线性比值会让人觉得"只有几颗星"）。
+- **银河**：银道坐标里的一条高斯带（不是贴图）。地平以下是**三层半透地面**（6°/层、每层再挡 1/4、缝上 0.75° 渐变），
+  银河从三层里被逐层压暗透出来；星点不透——那一条只对银河与天光成立。
+- **昼夜**：白天不关星（`DAY_STAR_FLOOR = 0.65`，银河单独 0.10）；地平用 2° 淡出代替大气消光，**不做**蒙气差。
+- **月球**：盘面是一颗被太阳照亮的真球（相位是真几何），半径**放大 3 倍**（真视半径在默认画幅里只有 3.9 px）；
+  白道按真黄经取 120 点走完一圈、每天重走一次；**月不在投影画幅里就连白道一起不画**（判据是画幅，不是相机 frustum）。
+- **标签**：六类都画在同一个 `SkyLabels` 上（2D 投影、恒定屏显字号、只投画幅内且地平以上、重叠即丢），
+  摆位优先级：北极星/斗的八颗星/月 → 行星名 → 宿名 → 廿四节气名 → 星官名 → 88 星座名。
+- **记号**：北极星名（从同一份星表现查）；**北斗八星两套名**（`星宿` 关＝星名 `天枢…摇光` + 左辅，开＝神名 `贪狼…破军` + 洞明）；
+  **五星也两套名**（`星宿` 关＝`水/金/火/木/土星`，开＝`辰星/太白/荧惑/岁星/镇星`；天王、海王不属五行，名字不随开关，2026-10-15）；
+  **廿四节气**名（λ 每 15° 一格，刻只往黄道**北侧**画、不画圈；**当令那一个**用青色、其余 23 个灰一档，2026-10-15）；**天赤道**（淡赤）与 28 根**分野刻**（淡金，与节气刻同一根尺）、
+  分野名（淡金，在赤道下方）与星官名（金，在星团身上）靠颜色分开；**天顶**是一个 1 px 淡白虚线十字（锁 world 的 +Y）。
+- **滑行**：转向钮走 `1 − e^(−9·delta)`、时辰± 走 `1 − e^(−7·delta)`（每帧发 `changed`，看得见天在转）；
+  拖动 / `--sky-view` / `现在` 是"立刻到位"那条路。
 
 ### HUD 罗盘规格（自内向外）
 
-**盘面 = 两张按当前时刻排的盘**（奇门时家 / 大六壬）+ 中心的太极。环是数据，不是算法：
-`QiMen.pan()` / `LiuRen.pan()` 给什么就画什么，时辰一变重排一次。盘径 276，盘心在 (150,150)。
-
-| 层 | 内容 | 分度 |
-|---|---|---|
-| 盘心 | 小**太极**（半径 17.3，48 段拼的）——原来的方位读数与八风名已去掉 | — |
-| 环一 | **后天八卦的卦符**（坎北、离南…），半径 **26**：奇门八宫就落在这八个方位上。**不写卦名、不写洛书数**——洛书宫号与卦的配对写在 `SkyCompassHud.BAGUA` 里（数据与质检都用），只是盘上不显示；**三根爻按盘心径向排**（卦是随盘转的，不像 神/星/门 那样正写） | 8 × 45° |
-| **八分盘**（底色） | **盘被八个宫分成八扇、其中四扇微微提亮，提亮的那半就是内盘**（用户要求：洛书 `8341` 宫为阳宫、`2967` 为阴宫，"奇门阳局阳宫为内盘"，内盘加个微亮的底色）。扇区 = 盘角 45° 一格、以该宫方位为心，环带 **r 34…90**（卦环 26 之外、驿马 92 之内，正好垫在八宫块底下）；两档底色都是盘自己的青（`C_PANEL_INNER` α 0.13 / `C_PANEL_OUTER` α 0.045），**阳遁亮 8/3/4/1、阴遁亮 2/9/6/7**（`QiMen.is_inner()`）——一个节把局数翻过来，盘上亮的半边就换到对面去。八扇同宽同半径、接缝处不叠画；**没排到盘时不画** | 8 × 45° |
-| **八宫块** | **奇门 三行一块**：八个宫各在**自己那个方位上**写**三行** —— `神` / `星 + 天盘干` / `门 + 地盘干`（自上而下），**每个字正写、不随盘转**；值符神/值符星/值使门**只染名**金。**"门在里、星在中、神在外"三个半径环已取消**：锚点 = 该宫方位、半径 **64**，三行相距 **14 px**，整块占 r **43…85**。旬空的宫在神名**左边**挂一个 `〇`——**挂在外边、不参与居中**，所以那块的三行标签仍然对齐 | 8 × 45° |
-| **大六壬环** | **大六壬 天盘支 + 遁干 + 贵人**（空亡位为 〇）——**唯一还按环排的盘**，标签沿环的切向排、字头朝外。盘下方那 5 组（盘角 120°–240°）**翻 180° 正着写**（用户："下方5组字反着的，改成正过来方便读"）；盘正左/正右两宫（盘角 270°=东、90°=西）改成一列**竖排正字 神 / 干 / 支**（从上到下，用户要求），行距一 em——那两处本来就占 13×39 px 的竖框，字正过来后位置不动。**两处标色**（2026-10-12，用户："月将支标用金色，贵人用红色"）：**月将那一宫的 `支` 染金**（`C_DUTY`，与值符星/值使门同一个金）、**贵人那一宫的 `神` 染红**（`C_GUIDE` = 盘自己的红）；逐字上色，同宫另两个字仍是环的暖琥珀 `C_ZHI`，位置一个像素不动。哪一宫是月将/贵人由 `LiuRen.pan()` 在 slot 上给的 `general` / `guide` 说，环不算 | 12 × 30° |
-| **换字飞转** | 一个时辰翻盘时，盘上的字**飞到**自己的新位置（2026-10-13）：盘上的字是一份**按名字配对的清单**（`block:<名>` / `ring:<神+遁干+天盘支>` / `horse`；卦符环不在内——太极那八根爻永不动），`set_chart` 拿到新盘就把"屏上此刻的样子（含正在飞的进度）"当起点算走法：**同位不动** / **同心转**（位次差 ≤ 2.25 格 → 沿本环的圆扫过去）/ **直线飞**（更远 → 两点连线 + 中途抬起 6 px）/ **淡出·淡入**（新盘没这个名字 / 旧盘没有它，原地缩到 0.35）。`FLY_TIME` **0.42 s**、缓动 `1−(1−t)³`；帧由卡自己推（`_step_fly` → `queue_redraw`），**不需要** lingwang 那对 `anim_started|finished`（卡独占 HUD 窗）。天空那一侧只在**时辰翻的时候**交盘（外加 HUD 建好后那一次）——交盘就是起飞信号。实测：同一个日内换时辰 = 环上 12 条各走 **30.000°**、宫块里 16 行走 90°（同心转）8 行走直线；**跨日**（子时，贵人宫随日干换）= 环上十二个字整张重排（新生 12 = 淡出 12，名字守恒）；落定后与"从没飞过"的同一张盘**逐像素相同**；**不飞的时候这张卡一个像素都没动**（改动前后同瞬刻出图 0.945/255 vs 负对照 0.957/255）。判据与坑见 `计划.md`「换字飞转」 | — |
-| **刻度外** | **太阳**：随它是白天/黑夜的圆点 + 细圈（地平线下压到 30% 亮度）；**五星**：与太阳**同一条道**（r 134）上各自一个**五行色的实心圆点**（`SkyPlanets.COLOURS` 的前五行就是五行色），**大小按视星等的同一根斜坡**（`SkyPlanets.mark_norm` → 半径 1.3…2.6 px），地平线下压到 30%。**只有金木水火土这五星上盘**（2026-10-14 用户："日月金木水火土星保留…五行星用五行色点"）：天王/海王仍在**壁纸**那一层（连轨迹与名字），只是盘不再画它们——盘读的是**日月五星**这七政（`SkyPlanets.FIVE_STARS` 是那道门，`_planet_marks()` 按名字滤）。它们和日月一样是"天空当下的位置"，不是盘上的环 | 方位 |
-| **刻度内** | **月亮**：细月牙（同上，地平线下压暗）——2026-10-14 用户："月用月牙图标"，月因此仍是这颗盘上唯一的**形状**（不是点） | 方位 |
-| 环外 | **时钟式度刻**：**12 大**（每 30° —— 正对十二地支，也是大六壬环扇区的口径）× **每大 5 小**（小刻 6°），共 **60** 根；大刻 10 px、小刻 5 px 长，**"子"那根青色唯一标记**再长 5 px、加粗到 1.8 px——盘固定之后，这一根是探针唯一的方位读数（G25）。**盘上只剩这一套刻度**（2026-10-14 用户："HUD里的分野刻度去掉,只留时钟刻度"）：廿八宿的宿度刻（原在 r 119…127、暖琥珀 28 根、地平线下压 30%）**从盘上整个删掉**——`R_MANSION_IN/OUT`、`C_MANSION`、`set_mansions()`、`_draw_mansions()` 与壁纸给盘送宿位的 `_mansion_marks()` 一并删除（`Mansions.opening_direction()` 因此没人用，也删）；宿的刻度仍在**壁纸**上（天赤道那条 + 分野名，见上一节的 `MANSION_TICK_COLOUR` / `MANSION_COLOUR`） | 60/12 |
-| **视角弧** | **盘外那一圈弧 = 当前 3D 场景的相机视向与视场**：半径 r=143（盘外、度刻之外，落在 12 px 的窗边里）、3 px 宽，圆心角正中 = `相机方位 − 180°`——点北（方位 0）时弧形正中转到**盘底**，点南时到盘顶。它替掉了原来盘顶那个三角（旧"基准指针"）：盘不再转，所以"当前看哪"必须由会动的东西来说。**张角 = 画幅真正的水平视场角**（2026-10-12 第二十一轮，用户："弧做长点，跟实际3D场景中的视角一致，宽屏的弧就长点，窄屏就短点"）：`SkyCompassHud._view_arc_span()` 读 `rig.camera` 那个视口的宽高比，**再按当前那张网格算**：鱼眼（默认）把角度线性铺上去，张角 = `fov/2 × 宽高比 × 2`——2560×1440 + fov 96 → **170.7°**；`lens` 那一支走 `2·atan(tan(fov/2)·aspect)`，同一档是 **126.3°**（44/93 那一档是 165.3° / 123.8°）。老那条 `lens` 口径的算式配 fov 100 的角上是 **129.5°** 的弧（实测 128.8°，两端的圆头吃掉 0.3°），21:9 → 141.3°、1:1 → 100°、3:4 → 83.6°。没有相机（探针）时退回旧记号宽度 `ARC_SPAN = 40°`。弧是**方位**上的张角（画幅的水平视场只在地平线那一条上与方位相等，够看）；视角正好压在某个方位上时弧的中间被那个方位自己的三角挡掉，弧的两端仍看得出转向 | 方位 |
-| **方位三角** | **盘上四个方位三角 = 原来 `北/东/南/西` 那一行按钮**：上=南、下=北、左=东、右=西（上南下北），点在盘外、尖朝外，各自一个 **24×24 的真 Button**（`HudWindow._control_at` 靠这个把它和拖动区分开），点一下走 `CameraRig.face_cardinal()`——与旧那一行同一根接线，只是视角弧滑到那个方位上去。三角颜色照旧：东淡绿 / 北红 / 西白 / 南（用户没给色）取盘自己的青 | 4 |
-| **时针 / 分针 / 秒针** | 都从太极边缘（`TAIJI_R+3` = 20.3）向外画：**时针短粗到 r 74、分针到 r 98、秒针细长到 r 124**（秒针尖端正落在 60 小刻的里端；它的里段要跨过八宫块和两条环，所以里段淡、外段实）。角度都 = **从顶部顺时针**：时 `(时+分/60)/12`、分 `(分+秒/60)/60`、秒 `秒/60` 圈——盘的**地支环就是钟面**（午在顶 = 正午/子夜，一根大刻 = 一小时），60 小刻同时是分格与秒格。**三针读的是观测者自己的墙上时钟，不是天钟**（`SkyCompassHud.wall_clock()` → `Time.get_unix_time_from_system() + utc_offset`）：按一次 时辰± 天钟会在一秒里走两个小时，跟着它读的针要转 120 圈；针靠自己的 `_process` 每秒要一帧来走 | 6°/秒、6°/分、30°/时 |
-| **驿马 `马`** | 画在**它自己的一圈** r **92**（`R_HORSE`，落在两块之间的空档）、驿马支的方位。**正着写**（不随盘转），并且**每过一个天空秒横着晃一下**（切向 ±3 px、约 0.3 s 衰减）——盘上唯一写"排盘在往哪走"的记号 | 方位 |
-| 盘四角 | **盘的四个角就是两列控件，每列三行**（2026-10-12 第二十一轮：`↙/↘` **24×24 方钮**落在 (16,30)/(260,30)，内角离盘沿 8 px；左下 **星座 / 星宿 / 桌面**，右下 **时辰− / 时辰+ / 现在**）。六颗同一尺寸 **38×24、行距 24、三行相接**（用户："上中下三个排一起…对齐行间距一致贴上"），横带 = 窗 y **248…272 / 272…296 / 296…320**，坐标写在时间栏自己的坐标系里（起点在盘下 300，所以是 -52 / -28 / -4）。**第七颗 `>>`**（2026-10-14，用户："HUD时辰−上方再加伸小方按扭显>>,按扭右于时辰+按扭右齐"）：**24×24 方钮**落在右列**上方一格** = 窗 y **224…248**、x **264…288**，**右沿与 时辰± 同一条（288）**、下沿贴死 时辰− 的上沿（间隙 **0**）。方而不是 38×24 一整行，是**盘沿的圆正好从那个角上切过去**：盘沿（r 138、圆心 (150,150)）在钮的左上角穿进来 2 px——线段从 **(264, 227.8)** 走到 **(266.5, 224)**，中间那 2 px 被钮自己的墨盖住、两端落在 5 px 的圆角外；38 宽一整行则会有 **16 px** 的圆压在钮底下。钮上不写单位名——单位名写在它下面那两颗 chip 上（见「时间栏」）。**为什么 38 宽**：第一行读数最长 196 px（`闰冬月廿九` 那种日期，居中止于 x 248），两列各留 12 px 边距、列宽 38 才能与它留出 2 px 净空。**星座/星宿 是 SwitchChip**（胶囊轨 + 名 + 末尾圆点，开着实心青点/亮字/提亮的轨，关着空心环/灰字），**桌面 是壳放进去的同一款 chip**（座位 `hud_shell_slot`，见「背景接口」）；时辰±/现在 是普通圆角 chip（5 px 角），一眼分得开"开关"与"按钮"。字体有 ↙ U+2199 / ↘ U+2198（`Font.has_char` 查过；◀ U+25C0 那一族全无），字号 16 + 1 px 同色描边 | — |
-
-**卦符为什么是画的而不是字**：Unicode 有 ☰ U+2630…☷ U+2637，但本机系统字体（`Fonts.CANDIDATES` 里的微软雅黑等）
-**一个都没有**（`FontFile.has_char()` 全 false，画出来是八个空框），所以 `hud_compass.gd` 用三根爻自己画
-（阳爻一横、阴爻中间断开，位掩码写在 `BAGUA` 第三列）。
-
-**盘固定 上南下北；"当前看哪"由盘外那圈视角弧说**。要动盘上的字或排法，先去问用户。
+- 盘面 = 两张按当前时刻排的盘（奇门时家 / 大六壬）+ 中心太极；**环是数据不是算法**（`QiMen.pan()` / `LiuRen.pan()` 给什么画什么）。盘径 276、盘心 (150,150)。
+- 太极 → 后天八卦卦符环 → **八分盘底色**（阳遁亮 `8/3/4/1`、阴遁亮 `2/9/6/7`，提亮那半就是内盘）→ **八宫三行块**
+  （`神` / `星+天盘干` / `门+地盘干`，字正写不随盘转，值符神/星/门只染名金，旬空在神名左边挂 `〇`）
+  → **大六壬环**（天盘支 + 遁干 + 贵人；下方五组翻正、左右两宫竖排；月将支染金、贵人染红）
+  → **换字飞转**（同位不动 / 同心转 / 直线飞 / 淡出淡入，0.42 s，帧由卡自己推）
+  → **时钟式度刻**（12 大 × 每大 5 小 = 60 根，"子"那根青色、唯一标记）
+  → **视角弧**（张角 = 画幅真正的水平视场角，正中 = 相机方位−180°）
+  → **四个方位三角**（上南下北，各自 24×24 真 Button）
+  → **三针**（时针/分针/秒针从太极边缘向外；读的是观测者的**墙上时钟**，不是天钟）
+  → **驿马 `马`**（r 92，正写，每过一个天空秒晃一下；按所落之支的五行着色——
+  寅青 / 申白 / 巳赤 / 亥玄，2026-10-15）。
+- **盘四角 = 两列控件**：`↙/↘` 转向；左列 `星座 / 星宿`（两行），右列 `时辰− / 时辰+ / 现在`（三行）；
+  右列上方一颗 **`>>`** 换步长单位（**时辰 → 日 → 月 → 年** 循环，单位长度取整天 1/30/365 日；整圈一帧落地、只把余量平滑出来）。
+- 卦符是**画的不是字**：本机系统字体里没有 ☰…☷（`FontFile.has_char()` 全 false），`hud_compass.gd` 用三根爻自己画。
+- **盘固定 上南下北；"当前看哪"由盘外那圈视角弧说。要动盘上的字或排法，先去问用户。**
 
 ### 时间栏
 
-盘下那条 40 px 的带子只有两行读数（基线 300+12 / 300+29，居中）；**盘下沿那两列控件（每列三行）是这个时间栏画的**
-（两列都探进盘自己的矩形，所以它们的 y 是负的，见「盘四角」）：
+盘下那条 40 px 的带子只有两行读数（`盘下沿那两列控件也是它画的`）：
 
 ```
-左列: 星座 / 星宿 / 桌面(壳放的)      九紫离火 道历四七二三年九月十四      右列: 时辰− / 时辰+ / 现在
+左列: 星座 / 星宿                    九紫离火 道历四七二三年九月十四      右列: 时辰− / 时辰+ / 现在
                                      丙午 戊戌 丁巳 丁未 寒露中元 阴九局
 ```
 
-- 第一行 = `GanZhi.jiu_yun_name()` 给的那个运（**玄空星名**，一白坎水 … 九紫离火，随立春翻）+
-  `Lunar.date()` 给的农历日期（**年用道历计**，道历 = 农历年 + 2697）。
-- 第二行 = 四柱（年/月/日/时）+ 节气 + 三元 + 局：`QiMen.yuan_name()` / `ju_name()` 把 `QiMen.pan()["yuan"]` 与
-  `["ju"]` 写成 `上元/中元/下元` 与 `阴九局` 这种（局数的符号就是阴阳遁）。两行的文本由 `SkyTimeBar.read_date()` /
-  `read_chart()` 组，数据由 `SkyBackground._chart()` 用 `set_pillars()` / `set_lunar()` / `set_ju()` 交过去。
-- `现在` 是右列**第三行**（2026-10-12 第二十一轮：现在也跟 时辰± 上中下排一起），不再有"挂在哪一行末尾"的算法：
-  六颗 chip 同尺寸同行距，第三行（296…320）探进读数行的高度里，但**两列都在读数文字之外**（第一行最长止于 x 248、
-  第二行止于 240，左列 12…50、右列 250…288）。
-- 左列第三行是**壳的座**（`hud_shell_slot`）：壳把 `桌面` 开关放在这里，并因此**不再在托盘菜单里放那一行**
-  （用户："菜单里的桌面显隐开关也转出来，放在星座星宿开关下"）。芯片的状态由壳自己持（`main.gd::_desktop_shown`），
-  `Ctrl+Alt+H` 与芯片走同一条 `_toggle_desktop()`，所以两边永远一致（实机量：按热键后盘上那个开关同步翻到"关"）。
-- 两颗星空自己的开关的状态**由 sky 交给它**（`set_switch`）：`build_hud()` 交过来时 HUD 还没进树，所以
-  `SkyTimeBar` 把状态先记在 `_switch_state` 里、`_ready` 建 chip 时再摆上去——不然两颗开关一开就都是"关"。
-- **步长单位**（2026-10-14，用户："点这个按扭,时辰−+按扭依次变为日−+ 月−+ 年−+ 时辰−+轮流,并随时间步长切换颗粒度"）：
-  右列上面那颗 **`>>`** 走 `SkyTimeBar.UNITS` 的次序 **`时辰 → 日 → 月 → 年 →` 回到 `时辰`**，`_unit` 是当前那一格，
-  `_show_unit()` 就地把两颗 chip 的标签改掉（`时辰−/时辰+` → `日−/日+` → `月−/月+` → `年−/年+`），`_step()` 按
-  `UNITS[_unit]["seconds"]` 步进——**一个机制，没有第二套按钮**。
-  单位长度是**整天**（**1 / 30 / 365 日**）：按一次绝不移动"这一刻在一天里的位置"，因为**整张卡是按 时辰 排的**
-  （时柱、奇门的局、大六壬的天盘都跟它走）。用天文长度（朔望月 **29.530589 d**、回归年 **365.2421897 d**）的话，
-  每按一次就把时刻推进 **12.7 h / 5.8 h**，连按四次整天就走没了、每次落在一天里的不同地方——量过：`月−` 一次
-  时柱 `癸未 → 己丑`、`年−` 一次 `己丑 → 丙戌`（换成整天后这两次都是 `癸未 → 癸未`）。代价换成历法自己的漂移：
-  农历日每两次 `月` 漂一天、节气每按一次 `年` 漂 5.8 h——也就是"十二个农历月 = 354.4 日、不是一岁"这件事。
-- **整圈落地、余量平滑**（2026-10-14 用户第二次："日以上变化不需要做24小时以上实算平滑旋转,只需按平滑360度以内差的部分"）：
-  步子按**一圈天**（`Astro.SIDEREAL_DAY` = **86164.0905 s**，时间栏里叫 `TURN`）切开——**整圈 `set_time_unix()` 一帧落地，
-  只把余量（永远不到一圈、取**近**的那一侧）走 `move_by()` 平滑出来**。实测（`+`/`−` 各一遍，总步长精确到毫秒）：
-  `时辰` 7200 s 整个都在余量里（滑 **30.08°**，与以前一模一样）；`日` = 落 **86164.091 s**（正好一圈）+ 滑 **±235.909 s（0.99°）**；
-  `月` = 落 30 圈 + 滑 **±7077.285 s（29.57°）**；`年` = 落 366 圈 + 滑 **∓57.123 s（0.24°）**。取近的一侧是指 `年` 那 0.24°
-  是**倒着**平回来的，不是把 359.8° 顺着转一圈。落地那一段从**时钟自己的目标**（`TimeCore.aim_unix()`）量起，所以连按三次 =
-  整整三步（实测 3×`月` = **−7776000.000**）。为什么不整圈滑：一圈以上的旋转只是闪烁，而且滑行的每一帧都要重排盘、
-  重算农历（`Lunar.date` 一次 ~900 个月亮位置，本来就是按本地日缓存的）。
+第一行 = 玄空运名（随立春翻）+ 农历日期（**年用道历** = 农历年 + 2697）；第二行 = 四柱 + 节气 + 三元 + 局数（符号即阴阳遁）。
+`桌面` 那颗壳的开关曾占左列第三行，2026-10-15 按用户要求删掉（只有托盘那一处了）。
 
-### 盘外的两条地支环、星座边界与开关
+### 盘外的两条地支环与开关
 
-> 盘外的**地平线上/下是两条地支环**（下=地盘十二支、上=大六壬天盘支，同贴一条交线，见 `sky_branches.gd`）——
-> 它是壁纸上的地平方位尺，不是 HUD。天盘那一侧是**两行两字的块**：`干支`（遁干 + 天盘支，贴交线）在下、
-> `贵人`（天将的**双字名**）在上，两块同以该方位居中。**地盘那一侧再往下一行是八方向**（`北/东北/…/西北`，
-> 45° 一根、字号 12、暖色更淡）：地支是时辰刻度（30°），方向只回答"这一圈朝哪边"，两行交错。
-> **两处标色与盘面同一对**（2026-10-12）：`贵人` 那一行的双字名整行**红**（`GUIDE_COLOUR`），
-> `干支` 那一行里的**天盘支是月将时染金**（`GENERAL_COLOUR`，遁干仍是冷色）——逐字上色，
-> 落格仍是"干 + 支"的两字框（一 em 一格）。
-
-> **星座边界**（`SkyLines` 的 IAU 层，`data/constbnd.dat`）是星空里除星座图线之外的那些细线，**默认不画**
-> （`--sky-boundaries=1` 才画）：它把天空割成一块块，用户要的是星座本身。
-
-> **星座图线与中文名**、**宿名与星官图线**是星空自己的两颗开关，**画在盘左下角**（2026-10-12 第二十一轮：
-> 用户要求"把菜单里的星座星宿开关转到这里"）：`SwitchChip` 画 chip，按下发 `switch_toggled(id, on)`，
-> 层由 `SkyBackground.set_layer_switch(id, on)` 关（`figures` = 88 图线 + 88 中文名；`mansions` = 宿名 + 廿四节气名 + 星官图线 + 星官名 + 斗的八颗星改显神名）。
-> **`桌面` 那颗**是反过来的一颗：壳的开关，画在壳给的座位上（`Background.hud_shell_slot`），芯片与状态都是壳的
-> ——壳不认识任何具体背景，背景也只提供一个空 Control。托盘的菜单因此只剩 `换桌面 / 显示器 / 穿透 / 退出`
-> （水族箱没有座位，`桌面` 那一行**还在**托盘里：一个开关只在一个地方，也不能哪儿都没有）。
-> 开关只关它自己说的那件事（G35）：`星座` 不动宿与行星，`星宿` 不动赤道刻度、黄道与节气刻、行星和北极星。
+- 盘外·壁纸上：**地平线上/下是两条地支环**（下＝地盘十二支、上＝大六壬天盘支，贴同一条交线）——它是壁纸上的地平方位尺。
+  天盘那侧是两行两字的块（`干支` 在下、`贵人` 双字名在上，双字名整行红、天盘支是月将时染金），再下一行是八方向（45° 一根）。
+- 星座图线与中文名、宿名与星官图线是星空自己的两颗开关（画在盘左下角）。
+  开关只关它自己说的那件事（G35：`星座` 不动宿与行星，`星宿` 不动赤道刻度、黄道与节气刻、行星与北极星的记号与位置——五星只换名字）。
+- `sky_view.tscn` 是把 `SkyBackground` 立起来的**正式对照场景**（球 + 相机那几颗节点都在文件里，星星运行时布上去，跑 F6 才看得见）；
+  判据：球上有星、地平线与地面占比与壁纸同图。
 
 ---
 
@@ -626,18 +342,18 @@ A        = atan2(−cosδ·sinH, sinδ·cosφ − cosδ·sinφ·cosH)   # 自北
 | 场景 | 策略 |
 |---|---|
 | 水族箱 | 连续渲染（鱼在游） |
-| 星空 · 静态几何 | 恒星/星座/银河/网格静态，时间变化只改 `SkyRoot.basis` |
-| 星空 · 日月行星 | 仅时间步进时重算（10 次多项式求值，微秒级）；七行星每步重算位置（7 × 3 次开普勒解 + 光行时，微秒级），本体只改 `Transform3D` 与两个亮度 uniform，**从不重建网格** |
-| 星空 · 行星尾迹 | 每个**整数日**重算一次（7 × 49 次星历求值）；木星/土星走 VSOP87 级数，比开普勒那两行贵一个量级，仍在"一天一次"的量级。取这 49 个点的**时刻**也归它自己，其余时间静止 |
-| 星空 · 月球轨道 | 同样**每个整数日**重走一圈（120 × 约 3 次 `moon_state()` ≈ 50 ms，见 `计划.md` A32）；交点每天退行 0.05°，一天一次足够 |
-| 星空 · 二十八宿 | 赤道环（**淡赤**）+ 28 根宿度刻（**淡金**）+ 28 个分野名的锚点：**与恒星同在 SkyRoot 上的静态几何**（宿是 J2000 赤经分划，不随时间步变），一次建好再不动；名字本身由 `SkyLabels` 每帧投影 |
-| 星空 · 转向与时辰步进 | 只在**按下转盘钮或 时辰±的那一两秒**里逐帧重绘（`moved` / `changed` → `request_redraw()`，ON_DEMAND 下等于"连续画一秒再回静默"）；`moved` 与 `changed` 不再发就是回到静默的判据 |
-| 渲染策略 | 归背景所有：`Background.render_policy()` → `CONTINUOUS`（逐帧）或 `ON_DEMAND`（画一帧后停画，`RenderingServer.viewport_set_update_mode(...VIEWPORT_UPDATE_ONCE)`；时间/视角变化时背景自己 `request_redraw()`）。**代价与验收数字见 `计划.md` 的 A14**；量之前先看整卡与显存，别把"别的进程占着卡"记到本工程头上 |
-| 标签 | 只投影 FOV 内且地平以上的对象；六类同在一个 `SkyLabels` 上，按「星点、记号与取舍」那节的优先级摆位，`星座` 开关只关最密的那一层 |
+| 星空 · 静态几何 | 恒星/星座/银河/网格静态，时间变化只改 `SkyRoot.basis` 一次旋转 |
+| 星空 · 日月行星 | 只在时间步进时重算坐标（微秒级），本体只改 `Transform3D` 与亮度 uniform，**从不重建网格** |
+| 星空 · 行星尾迹 / 月球轨道 | 每个**整数日**重算一次，其余时间静止 |
+| 星空 · 二十八宿 | 与恒星同在 `SkyRoot` 上的静态几何（宿是 J2000 赤经分划），建好不动，名字每帧投影 |
+| 星空 · 转向与步进 | 只在按下的那一两秒里逐帧重绘，之后回静默 |
+| 渲染策略 | 归背景所有：`CONTINUOUS` 或 `ON_DEMAND`（`VIEWPORT_UPDATE_ONCE`，变化时背景自己 `request_redraw()`） |
 
-**谁会要一帧**：`ON_DEMAND` 的背景只在收得到"要重画"的理由时才画——时间（`TimeCore.changed`）、视角（`CameraRig.moved`）、
-HUD 的按钮、以及**宿主搬动/改尺寸窗口之后**（G36：`_on_screen_selected` / `_on_host_online` 里主动 `request_redraw()`）。
-漏掉最后一条的症状是"桌面换屏之后整块不见了"，而且**只在 ON_DEMAND 的背景上**出现。
+实测 2560×1440：星空冻结 **0.47%**、实时（1 帧/秒）**0.83%**、连续 60 帧/秒 **16.2%**；水族箱 **36–51%**。
+量之前先看整卡与显存，别把"别的进程占着卡"记到本工程头上。
+
+**谁会要一帧**：时间（`changed`）、视角（`moved`）、HUD 的按钮，以及**宿主搬动/改尺寸窗口之后**（G36）——
+漏掉最后一条的症状是"桌面换屏之后整块不见了"，而且只在 `ON_DEMAND` 的背景上出现。
 
 ---
 
@@ -645,116 +361,88 @@ HUD 的按钮、以及**宿主搬动/改尺寸窗口之后**（G36：`_on_screen
 
 ### Windows 桌面壁纸层（Win11 25H2 · build 26200）
 
-| # | 症状 | 根因 | 处置 |
-|---|---|---|---|
-| W1 | `SetParent` 成功、`wall=ok`，但桌面纹丝不动 | 挂到了一个**隐藏的** WorkerW。本机 19 个顶层 WorkerW，**全部不可见** | 必须同时要求 `IsWindowVisible(worker)` |
-| W2 | 顶层找不到可用的 WorkerW | 本机 `0x052C` **不产生可见的顶层 WorkerW**。真正的壁纸层是 **Progman 的子窗口 WorkerW**（与 `SHELLDLL_DefView` 同级，覆盖 5120×1440） | 先 `FindWindowExA(progman, NULL, "WorkerW", NULL)` 找 Progman 内的 WorkerW；找不到再退回顶层搜索 |
-| W3 | 挂进 Progman 后仍然看不到 | 直接把窗口挂成 Progman 的子窗口并 `HWND_BOTTOM` → 被 DefView/Progman 自身绘制盖住 | **必须挂进那个 WorkerW**，不是 Progman |
-| W4 | `FindWindowA("Progman", NULL)` 返回 0，但 `EnumWindows` 能枚举到 | `FindWindow` 在本机不可靠 | 统一用 `EnumWindows` + `GetClassNameA` 找窗口 |
-| W5 | 重挂后 `GetParent` 返回 0 | 跨进程 `SetParent` 要求目标窗口带 `WS_CHILD`；`WS_POPUP` 窗口会被静默忽略 | 先把 `WS_POPUP` 翻成 `WS_CHILD`，再 `SetParent` |
-| W6 | 会话锁屏/桌面重建后进程消失 | 子窗口被 shell 销毁 → Godot 收到 close → 退出 | 已加固：外来 `WM_CLOSE` **不退出**（只认 HUD 退出按钮 / `Ctrl+Alt+Q`）；host 每 5s 复检挂载 |
-| W7 | 挂载成功（回读 `GetParent` = WorkerW 且可见）、`--shot` 出图正确，**屏幕截图上却只有系统壁纸照片** | 桌面自带的那张壁纸图由 **`SHELLDLL_DefView` 那一层**画，而我们的窗口按 A1 就在它**下面** —— "图标永远在最上"和"系统壁纸照片能盖住我们"是同一件事的两面 | 先排除自己的锅：拿**从没改过的另一个背景**跑同一流程，两者同样不可见 ⇒ 是桌面背景，不是代码。真要用就必须让系统别画那张图：**桌面背景设为纯色**（Lively / Wallpaper Engine 的标准前置条件）。注意 Windows **主题会轮换**壁纸图（`HKCU\Control Panel\Desktop\Wallpaper = …\Themes\TranscodedWallpaper`、`WallpaperStyle=10`），所以症状会"20 分钟前还好好的、现在就盖住了" |
+| # | 陷阱 | 处置 |
+|---|---|---|
+| W1 | 挂到了一个**隐藏的** WorkerW → `wall=ok` 但桌面纹丝不动 | 判定必须同时要求 `IsWindowVisible(worker)` |
+| W2 | 顶层找不到可用的 WorkerW（本机 `0x052C` 不产生可见的顶层 WorkerW） | 真正的壁纸层是 **Progman 的子窗口 WorkerW**（与 `SHELLDLL_DefView` 同级） |
+| W3 | 挂成 Progman 的子窗口 → 被 DefView/Progman 自己画的东西盖住 | **必须挂进那个 WorkerW**，不是 Progman |
+| W4 | `FindWindowA("Progman", NULL)` 返回 0，而 `EnumWindows` 能枚举到 | 统一用 `EnumWindows` + `GetClassNameA` 找窗口 |
+| W5 | 重挂后 `GetParent` 返回 0 | 跨进程 `SetParent` 要求目标窗口带 `WS_CHILD`：先把 `WS_POPUP` 翻掉 |
+| W6 | 锁屏/桌面重建后进程消失 | 外来 `WM_CLOSE` **不退出**（只认 HUD 退出钮 / `Ctrl+Alt+Q`）；host 每 5s 复检挂载 |
+| W7 | 挂载成功、出图正确，**屏幕截图上只有系统壁纸照片** | 那张图由 `SHELLDLL_DefView` 那一层画，而我们在它下面 ⇒ **桌面背景要设成纯色**（Lively / Wallpaper Engine 的标准前置条件）；Windows 主题会轮换壁纸图，症状会"过一会儿才出现" |
 
-**正确顺序**（`host.c::apply_wallpaper`）：
-```
-找 Progman(EnumWindows) → 找 Progman 内的可见 WorkerW（无 SHELLDLL_DefView 子窗口）
-→ 窗口加 WS_CHILD（去掉 WS_POPUP）→ SetParent → SetWindowPos(HWND_BOTTOM, 无 SWP_FRAMECHANGED)
-→ 回读 GetParent 的 class == WorkerW 且 IsWindowVisible 才算成功
-```
-
-**独立校验**：挂上之后回读 `GetParent` 的 class == `WorkerW` 且 `IsWindowVisible` —— 正确时 Progman 的子窗口序是
-`DefView@index 0, our WorkerW@index 3`，即壁纸层排在图标层**之后**（z 序更下）→ `OK`。
+正确顺序（`host.c::apply_wallpaper`）：EnumWindows 找 Progman → 找 Progman 内**可见**、且没有 `SHELLDLL_DefView` 子窗口的 WorkerW
+→ 加 `WS_CHILD` → `SetParent` → `SetWindowPos(HWND_BOTTOM, 无 SWP_FRAMECHANGED)` → 回读 `GetParent` 的 class 与可见性才算成功。
 
 ### Godot + Vulkan + 重挂父窗口
 
-| # | 症状 | 根因 | 处置 |
-|---|---|---|---|
-| V1 | Godot 控制台刷屏 `ERROR: Couldn't get Vulkan surface capabilities (VkResult error -1000000000)` at `swap_chain_resize` | `-1000000000` = `VK_ERROR_SURFACE_LOST_KHR`。**`SWP_FRAMECHANGED` 会让窗口重建重定向表面，Godot 的 Vulkan surface 随之失效且永不恢复** | **绝不传 `SWP_FRAMECHANGED`**。只做 `WS_CHILD` 翻转 + `SetParent` + `SetWindowPos(HWND_BOTTOM, …)` |
-| V2 | 画面永远不出，但进程正常、指标正常 | 同上：surface 丢了就不 present | 同上 |
-| V3 | 重挂进 WorkerW 后**画面全空**（能透视看到用户原壁纸），但同一个窗口换另一个背景就正常；`--shot` 出图也正常 | 只含 `Environment`（`BG_SKY`/`BG_COLOR`）**没有几何**的场景在重挂后的窗口里不 present | 背景必须**有真实几何**：星空用内表面天球网格（`SkyRoot/Dome` + `dome.gdshader`）而不是 `BG_SKY` |
+| # | 陷阱 | 处置 |
+|---|---|---|
+| V1 | `Couldn't get Vulkan surface capabilities (VkResult error -1000000000)`＝`VK_ERROR_SURFACE_LOST_KHR` | **绝不传 `SWP_FRAMECHANGED`**：它会重建重定向表面，Godot 的 surface 随之失效且永不恢复 |
+| V2 | 进程正常、指标正常，画面永远不出 | 同上：surface 丢了就不 present |
+| V3 | 重挂进 WorkerW 后画面全空（能透视看到原壁纸），换个背景就正常、`--shot` 也正常 | 背景**必须有真实几何**（星空用内表面天球网格），只含 `Environment` 的场景不 present |
 
 > 这条是本项目最贵的坑：挂了父窗口却什么都看不见，而所有 API 都返回"成功"。
 
-### Godot 4.7 API 陷阱
-
-| # | 症状/陷阱 | 处置 |
-|---|---|---|
-| G1 | `Invalid call. Nonexistent function 'poll' in base 'TCPServer'` | `TCPServer` 没有 `poll()`；用 `is_connection_available()` / `take_connection()`。`StreamPeerTCP` 才有 `poll()`/`get_status()`/`get_available_bytes()` |
-| G2 | shader 里 `Unknown identifier: INSTANCE_CUSTOM`（fragment 阶段） | `INSTANCE_CUSTOM` **只在 vertex 阶段可用**；要传到 fragment 必须自己声明 `varying vec4 inst` 并在 vertex 里赋值 |
-| G3 | `Condition "!first && !(format & Mesh::ARRAY_FORMAT_NORMAL)" is true` | `SurfaceTool` 的顶点格式在第一个顶点处锁定。要么**每个顶点都** `set_normal`，要么**都不设**再 `generate_normals()`；混用必炸 |
-| G4 | 顶点色明明是深蓝，渲染出来一片白 | **shader 里的顶点色是线性空间**。调色板按 sRGB 写 → 必须 `.srgb_to_linear()`（alpha 不受影响） |
-| G5 | 换了着色器还是纯白 | `MultiMeshInstance3D` **必须显式给 `material_override`**，否则用默认白材质。顶点色一直是对的 |
-| G6 | `Node not inside tree. Use look_at_from_position() instead.` | 节点入树前不能 `look_at()`；用 `Basis.looking_at(dir, up)` 或先 `add_child` |
-| G7 | 窗口标题对不上，host 找不到窗口 | ① `Window` 节点的 `title` 属性会覆盖 `DisplayServer.window_set_title()`；② Godot 在 debug 构建里会给标题追加 `" (DEBUG)"` | **按「进程 PID + 标题前缀」匹配**，不要比全等 |
-| G8 | HUD 窗口 `IsWindowVisible = false`，屏幕上看不见 | Godot 可能创建 subwindow 而不置 `WS_VISIBLE` | host.exe 启动后一次性 `ShowWindow(SW_SHOWNOACTIVATE)`（只做一次，不然后续"隐藏"按钮会被顶回来） |
-| G9 | 隐藏再显示 HUD 后置顶/穿透样式丢失 | Godot 隐藏 `Window` 节点会**销毁原生窗口**，再显示时是**新 HWND** | 不缓存 HWND；host 每 5s 复检并重新套样式 |
-| G10 | 截图拿到的是上一帧/黑图 | 一定要 `await RenderingServer.frame_post_draw` 再 `get_texture().get_image()` | 已封装在 `--shot` 路径；主视口与 `Window` 的视口都可用 |
-| G11 | 新克隆/新目录下报 `Could not find type "X"` | 全局类缓存 `.godot/global_script_class_cache.cfg` 只在导入时生成 | 跑一次 `--headless --path . --import` |
-| G12 | `.godot/imported/` 里堆满运行时截图 | Godot 会导入 `res://` 下的 png | 给纯运行时目录放 `.gdignore`（现在放 **`.tmp/.gdignore`** 一个，罩住整个临时目录） |
-| G13 | HUD 工具条的菜单被内容盖住（半透明暗块，点得到但看不见） | Control 子节点**按树序绘制**：内容 `set_content()` 是后加的，画在工具条（先加的）之上 | 给工具条显式 `z_index = 1`（`shell/hud_window.gd`）。**这条随旧工具条、也随菜单窗口一起退休**（菜单 2026-10-13 进了托盘，见 G30） |
-| G14 | 非激活窗口（`WS_EX_NOACTIVATE`）里 `OptionButton` 的原生弹窗**不出现** | Godot 的 popup 是独立 OS 窗口，依赖激活/焦点 | HUD 里**不要用原生弹窗**（当时的做法是菜单自绘在同一窗口内）。**菜单搬进托盘后这条更彻底**：托盘弹窗是系统的、不是我们那扇 `WS_EX_NOACTIVATE` 窗的，天生不受这条约束 |
-| G15 | `Window.render_target_update_mode` 报 "Invalid assignment ... on a base object of type 'Window'" | 该属性只在 **`SubViewport`** 上；根窗口/`Window` 不暴露 | 按需渲染用 `RenderingServer.viewport_set_update_mode(get_viewport().get_viewport_rid(), VIEWPORT_UPDATE_ONCE / _ALWAYS)`（见 `shell/main.gd::_apply_render_policy`） |
-| G16 | **星点/银河之外的透明物完全不渲染**，但换成不透明材质就正常；`--shot` 出图、无任何报错 | 天球用了 `depth_draw_never` → 它被归入**透明队列**；透明物按 AABB 距离从远到近画，而天球的 AABB 以相机为中心（距离 0）→ **最后一个画**，把先前画的 `blend_add` 星点整片盖掉。不透明物因为写了深度，反而"穿过"了这层 | 不透明几何**不要**用 `depth_draw_never`（天球写深度即可：星点在 r=480、天球 r=500，深度天然正确）。排查手法：把可疑材质换成 `StandardMaterial3D` 对比 |
-| G17 | `--headless` 下跑 `--script` 探针，`MultiMesh.get_instance_transform()` 读回全是 0 | headless 用 `RendererDummy`，`multimesh_instance_set_transform` 是空实现 | 需要读回顶点/实例数据的探针**不要**加 `--headless`（用真渲染器跑，脚本自己 `quit()`） |
-| G18 | 星座边界（VI/49）：按 `bound_20.dat` 文件顺序连线 → 满屏竖条纹；按"等赤经/等赤纬分组" → 只剩 20% 的线；按"邻近重建" → 串到隔壁边界上（总长 6000–8800°，来回乱走） | ① J2000 文件按**赤经排序**；② 岁差把弧线从 1930 的等赤经/等赤纬网格上挪开，几何上再也分不出"同一条腿" | **拓扑用 `constbnd.dat`**（每星座的第一行是原点，其后按逆时针列出边界折点 = 显式拓扑）+ `Precession` 把折点从 B1875 岁差到 J2000。自证：岁差结果与 `bound_20.dat` 的 J2000 折点中位偏差 0.0000° |
-| G19 | `--script` 探针"卡死"几分钟不动，也没有任何输出 | GDScript **解析错误**会让 `_init()` 根本没跑起来，`quit()` 自然永不执行 —— 看起来像死循环 | 探针一律配 `timeout`；看不到输出时**先看有没有 `SCRIPT ERROR: Parse Error`**，别急着找死循环 |
-| G20 | `PlaneMesh` 建出来的"圆面"**完全不出现**，没有报错、没有警告，`--shot` 里也找不到 | `PlaneMesh` 默认 `orientation = FACE_Y`，即**水平**面片：拿它当"面向相机的圆盘"，四边形与视线共面 → 侧看一条线（面积~0） | 建面向相机的四边形必须显式 `mesh.orientation = PlaneMesh.FACE_Z`（或自己填 UV） |
-| G21 | 缩放星空后星点变成一团团大光斑、星座细带变成宽带 | 星点四边形（0.8–2.8 世界单位）与细带（0.42/0.26）是**按固定视场 60° 建的天球几何**，视场一变，同样的世界尺寸在屏幕上的角径就变了 | 顶点着色器里以"该顶点所在天球半径方向"为不动点缩放：`vec3 base = normalize(VERTEX) * sphere_radius; VERTEX = base + (VERTEX - base) * size_scale;`，`sky.gd` 在相机 `moved` 时把 `size_scale = fov / CameraRig.BASE_FOV` 喂进去（亮度不变，只变尺寸） |
-| G23 | HUD 圆盘上的标签**全挤在左上角**，字都在、位置全错；`draw_circle` 画在同一"半径"上却完全正确 | 把"极坐标 → 屏幕点"写成 `dir * R`（`dir` 是单位方向向量）。那样得到的是**以控件原点为圆心**的半径 R 上的点，不是以盘心为圆心的 | 一律 `CENTRE + dir * R`。**排查手法**：把同一个 `at` 再用 `draw_rect` 画一个 2×2 红点——红点和字一起跑偏，就说明错在坐标、不在文本绘制 |
-| G24 | 探针"盘上缺一个刻"、"多出一个刻"，但图上看得好好的 | 角度跨 0°/360° 缝时**算术平均**是无意义的：`(359.9 + 0.1)/2 = 180` | 角度平均一律用**圆均值**（对单位向量求和再 `atan2`）。折线/方位/表盘角度都适用 |
-| G25 | 只读"跑刻位置"的探针**在任意 15° 整数倍的方位上都通过**（0 与 180 的图都 pass），负对照也 pass | 24 个 **等距**的刻在 15° 旋转下不变（5° 环在 5° 下同理）——这组特征里根本没有"哪边朝上"的信息 | 盘卡要留**一个唯一标记**（本项目是"子/北"那根青色刻），探针读它而不是读等距环；并把"换个方位声明同一张图"作为**负对照**跑一遍，它必须 FAIL |
-| G26 | 银河画成**一条烧到纯白的发丝线**外加几十像素的糊光；白天特别刺眼 | `milky_way(local_pos)` 传进去的是**顶点位置**（天球半径 500），而函数里 `asin(clamp(dot(dir, pole)))` 与 `pow(dot(dir, centre), 2.5)` 都假定 `dir` 是**单位向量**：前者把 `lat` 顶到 ±π/2 → `band` 塌成 0.07° 宽的发丝线；后者把 500 抬到 2.5 次方 = **5590** → `bulge` 爆掉，细线被 bloom 糊成一片白 | 传 `normalize(local_pos)`。**判据**：凡是"点积 + asin/pow"的向量函数，先归一再用 |
-| G27 | 改完 `.gdshader` 画面**整体变黑**，但进程正常跑完、`--shot` 照样报 `err=0`、退出码 0 | Godot 的着色器编译错误**只往 stderr 打一行**，材质静默退化成 fallback（黑），整条流水线不受影响——和 G19（探针解析错误）同族："会报错，但不拦人" | 改 shader 后一律 `grep -i "shader error"`（典型如新加的 uniform 撞了 `fragment()` 里的局部变量：`Redefinition of 'night'`） |
-| G28 | **`z_index` 只管画，不管点**：picker 的菜单明明画在内容之上，点它却触发**内容里同一位置的按钮**（用户报告："下拉菜单会优先触发时辰−"） | Godot 的鼠标拾取是**按树序**从最后一个子节点往回走（`gui_find_control_at_pos`），`z_index` 不参与 | 工具条在**树序上也要排在内容之后**（`move_child(_toolbar, -1)`）。**这条随旧工具条一起退休**：菜单先在 2026-10-12 搬进自己的 OS 窗口（G30），又在 2026-10-13 搬进托盘——两边都不用 Godot 的拾取 |
-| G29 | `--shot` 的整条命令**跑完了、退出码 0、`err=0` 都没有**——就是没有图，也没有图那条打印；换哪个背景都一样 | 用户参数必须写在 **`--` 之后**：`OS.get_cmdline_user_args()` 在没有 `--` 时返回**空数组**，`Args.parse()` 拿到空字典 → `--shot` / `--sky-time` / `--background` 全部落空，应用照默认值跑，`_shot` 因此是 false、`_capture()` 根本不进。G19/G27 的同族：**不报错的失败** | 出图（或任何带参运行）一律 `"$G" --path . -- <参数…>`；`--script` 探针那条同理。**判据**：先让应用把 `OS.get_cmdline_user_args()` 打出来，别猜 |
-| G30 | HUD 的**菜单窗口**一整套坑：面板点了没反应/看不见、点了"像在 HUD 底下" | ① **嵌套 Window 只画第一帧**：`Window` 套 `Window` 时子窗口首帧之后再不重绘（`--menu=1` 开机就展开能看见、之后任何变化都不上屏）→ 菜单必须是**壳自己的**窗口（与 HUD 平级），不是 HUD 的子节点；② **`unfocusable = true` 会连点击一起丢掉**：Godot 的 NO_FOCUS 文档自相矛盾（标志说"除鼠标点击外都忽略"，成员说"不能交互"）→ 非激活交给 host 的 `WS_EX_NOACTIVATE`；③ 两个 overlay 窗口的**标题前缀不能互相包含**（host 按前缀匹配，`XuanDesk.HUD` 会同时匹到 `XuanDesk.HUDMenu`）→ 菜单叫 `XuanDesk.Menu`；④ 两个都是 topmost 时**谁在前看谁最后升起**，Godot 重绘 HUD 会把面板埋掉 → host 把菜单 window 设成 HUD 的 **owned window**（被拥有者永远在拥有者之上）；⑤ 该窗口的视口按需重绘：不设的话它只画创建那一帧 | 当时的解：菜单 = 壳的窗口 + `always_on_top` + host 的 `WS_EX_TOPMOST/TOOLWINDOW/NOACTIVATE` + `GWLP_HWNDPARENT=HUD` + 每次变化 `VIEWPORT_UPDATE_ONCE`。**2026-10-13 整条退休**：菜单搬进任务栏通知区，那扇窗、它那套 host 侧角色（`g_menu_title`/`apply_one_overlay` 的第二条）与 `--menu=1` 出图开关**全部删掉**——托盘弹窗是系统的，这五条都不成立。留着的道理只有一条：**"把窗口粘在窗口上"是这一串坑的总源头**，能不做就不做（菜单当初是非做不可：穿透锁上后 HUD 上没有活的东西） |
-| G31 | 用户报告"**天龙座的连线都穿小熊座了，好多星座的连线都有交叉**"——但星点、星座名、每段线都在，初看"什么都不缺" | 88 条连线是**手写的拜耳字母对**，错在连接关系而非数据：旧表里两百多段越出自己的星座、几十处自交（最长的那几段横穿隔壁星座，天龙座一条甚至**跨过北天极**，自然压在小熊座身上；小熊座的斗被写成两条对角线）。这类错**不报错、不缺文件**，肉眼在 100° 视场里也很难逐条判 | 判据必须**几何化**：① 用 `data/constbnd.dat` 的显式折点（岁差到 J2000）建**球面多边形**，"点在多边形内"用正交投影 + 射线法——注意正交投影是**二对一**的，对跖点会落到同一点，必须再判 `dot(dir, 质心) > 0`；② 沿每段大圆按 0.25° 采样，统计"落在别家多边形里 ≥2° 且深度 ≥0.8°"的段；③ 两段大圆求交判自交。修法：按**传统图形**重排（公开星图只作对照、不进仓库，见「数据源与许可」），本星座命不了名的星（旧 Argo 的跨座星、巨蛇座尾穿蛇夫那几颗）**删点成弦** |
-| G32 | `--sky-time` 给的是**本地**时间，出图却"整片天转了半圈"（北天极的高度 = 纬度、不随恒星时变，只把天球绕极转了一个大角） | `time_from_text()` 走的是 `Time.get_unix_time_from_datetime_string()`，Godot 这条**按 UTC 解析**；而 HUD 的时辰/四柱是北京的本地时间（`Observer.utc_offset = 8`）。写 `2026-12-15T23:00:00` 得到的是**北京 12-16 07:00**，恒星时差 8 h ≈ 120° | 出图/探针里的 `--sky-time` 一律按 **UTC** 写（本地 23:00 → 写 `T15:00:00`），或直接给 unix 秒；`--sky-view` 的方位/高度要用**同一个瞬刻**（UTC 的 JD）算。**判据**：星图对不上先查这一条，别怀疑投影 |
-| G33 | **JPL 的两版近似根数，为 1800–2050 做的那版反而更准**——照"长时间跨度的那版更强"的直觉选，天王星会差到 1018″ | Standish 的两张表：Table 1 拟合 1800–2050（只给六根数 + 直线速率），Table 2a 拟合 3000BC–3000AD（外加 Table 2b 的四个 `b,c,s,f` 项，跟着木土 5:2 共振走）。两版都实现过、都拿 Horizons 的 astrometric RA/Dec 在 1801–2050 抽 20 日逐点比：**Table 1 每一项都不差于 Table 2**（木星 425″ vs 705″、土星 631″ vs 1276″、天王星 81″ vs 1018″、水星 21″ vs 30″） | 用哪张表 **由使用窗口决定，不由跨度决定**：`planets.gd::ELEMENTS` 用的是 Table 1，表头的注释里钉着这一整张对照表。**判据**：任何"再加一组更高阶项就更准"的想法，先在本窗口里量一遍再说 |
-| G34 | `--shot=.tmp/shots/x.png` 报 `Can't save PNG at path … (err=7)`，`err=0` 的那条打印也不出现 | `.tmp/shots/` 目录**本身不在**时，`Image.save_png()` 与 `FileAccess.open()` 都是 `ERR_FILE_NOT_FOUND`——写盘**不会**替你建目录（`.tmp/shots/` 曾被整个删掉过，连 `.gdignore` 一起） | 出图前 `mkdir -p .tmp/shots`。顺带：`.tmp/.gdignore`（挡 importer 用）**不影响**写盘，删不删与这条无关；`res://` 下被删掉的目录一样不会自动出现，探针 dump 建议写 `user://` |
-| G35 | `菜单` 的 `星座` 开关一按，**廿八宿的名字和七个行星名一起消失了** | 那三个名字层（星座名 / 宿名 / 行星名）画在**同一个** `SkyLabels` 上，而开关原来是 `_labels.visible = on`——按的是"整层"，不是"星座" | 开关只关它自己说的那件事：`SkyLabels.set_figures()` 只跳过 88 个星座名，宿名与行星名照画（`sky.gd::set_layer_switch` 调它，不再动 `visible`；2026-10-12 第二十一轮开关从菜单搬到盘上，钩子跟着改名）。**判据**：往一个已有开关的层里加东西时，先问"这个开关的名字还成立吗" |
-| G36 | 把 3D 桌面**换到另一块屏**（或宿主机重启后重新贴合窗口）之后，星空**整块不见了**——窗口在那儿、几何也对，就是不画 | 窗口被外部 `SetWindowPos` 搬走/改尺寸 = 一次 `WM_SIZE`，而星空的渲染策略是 `ON_DEMAND`（G15 那套 `VIEWPORT_UPDATE_ONCE`）：**画一帧的钱已经花完**，改尺寸不会让谁再要一帧。水族箱是 `CONTINUOUS`，所以同一个动作在水族箱上**完全看不出问题** | 任何让宿主搬窗口的动作之后**主动请求一帧**：`_on_screen_selected` / `_on_host_online` 里 `_background.request_redraw()`（与 `桌面` 显隐那条路一模一样）。**判据**：ON_DEMAND 的背景上做"窗口被外力改尺寸"的验证，必须**用这个背景自己**跑，换一个 CONTINUOUS 的背景会假通过 |
-| G37 | 给新的一层加了几行代码，**那一层整层不见**（名字/环/十字一个都不画），但进程照跑、`--shot` 照出图、退出码 0、也没有"缺文件"之类的话 | `for axis in [Vector2.RIGHT, Vector2.DOWN]:` 里 `axis` 是**无类型 Variant**，紧接着 `var way := axis if … else -axis` 推不出类型 → `Parse Error: Cannot infer the type of "way"`。这一条错误**不在被改的那一层报**：`sky_labels.gd` 编不过 → `sky.gd`/`backgrounds.gd`/`main.gd` 一串 `Failed to compile depended scripts`，而 `_switch()` 拿着编不过的 GDScript 调 `.new()` → `Invalid call. Nonexistent function 'new' in base 'GDScript'`，背景**照样 build 完**（星点、黄道、宿都在，唯独那一层没有） | 数组字面量取出来的元素一律**显式打类型**（`for axis: Vector2 in […]`、`var way: Vector2 = …`）；排查走完整 stderr（`2>&1 | head -40`），**别只看 `| grep error`**——这条错误的第一行是 `Parse Error`、第二行才是它拖垮的一串（G19 的同族） |
-| G38 | 探针里七个行星的位置全是 `nan`，还刷了一屏 `Vector3 cannot be normalized…`；同一条探针里 `direction_of()` 却好好的 | 探针把**Unix 秒**当成儒略日喂给了 `Astro.tt_from_ut(jd)`：`tt_from_ut(1786555800.0)` 得到的是"JD 17.8 亿"→ `T ≈ 4.9 万年`：VSOP87 的级数在 `T¹…T⁵` 上炸成天文数字、开普勒解在 `e>1` 上发散（`.length()` 先变 inf 再变 nan）。`Astro` 里两套时间戳并存：`julian_day_from_unix(unix)` 才是那一侧的入口 | 喂 `jd` 的地方一律问一句"这是儒略日还是 Unix 秒"：unix → `Astro.julian_day_from_unix()` → `tt_from_ut()`。**判据**：`JD` 打印出来应该在 2.4e6 附近，看到 1.7e9 就别往下算了 |
-| G39 | `--script` 探针在 **`_initialize()`**（或 `_init()`）里就建场景、读相机：**一路"全中"其实是假通过**。那时节点 `is_inside_tree()` 还是 false（`get_viewport_rect()`/`get_global_transform()` 报 `Condition "!is_inside_tree()" is true`），`Camera3D` 没有 world（`get_frustum()` 返回**空数组**，`is_position_in_frustum()` 于是**对任何点都返回 true**），`Window.size_changed` 是 null 报 `Invalid access to property`——而报错的行号会指到**你没改的那个文件**（`sky_branches.gd`、`sky_labels.gd`） | `--script` 的 SceneTree 脚本里，活放到 **`_process()` 的第一帧**（返回 `true` 即退出）：那时树已入、world 已有；`--headless` 下相机照样有 world（与 G17 只读数据的限制不冲突）。**判据**："在不在框内"一律回 true ⇒ 先查探针跑在了 `_initialize()` 里 |
-| G40 | **`穿透`（HUD 鼠标穿透）打开了、HUD 也确实不吃点击了，可点在 HUD 上的事件一个都到不了下面的进程**（用户报告 2026-10-13："现在只是 HUB 不能点了，但没有穿透点到 HUD 下面的其它进程的控件"） | `Window.mouse_passthrough` 在 Windows 上只是 `display_server_windows.cpp` 里的 `wd.mpass`，唯一效果是窗口对 `WM_NCHITTEST` 回 `HTTRANSPARENT`——而系统只把它转给**同一线程里**更底下的窗口（HUD 窗口那个线程在那个点上没有别的窗口），于是点击被**吞掉**：既不进 HUD、也不进下面的进程。`WS_EX_TRANSPARENT` 单独一个**根本不起作用**（非 layered 窗口的命中测试不看它；实测那种窗口照样自己吃下点击） | **`WS_EX_LAYERED \| WS_EX_TRANSPARENT` 两个一起**才是系统认的那一对（layered 窗口的形状与透明被忽略、事件交给下面的窗口），由 `host.exe` 套在 HUD 上（`apply_one_overlay`，和它管的置顶/工具窗/不激活同一处，客户端发 `lock 0\|1`）。**判据**：真点一下（`SendInput`）点在 HUD 上，HUD 下面放**另一个进程**的窗口——它必须自己记下 `WM_LBUTTONDOWN`；`WindowFromPoint` 只能当旁证（它**不等于**输入投递：`HTTRANSPARENT` 那一档它会跳过 HUD 报出下面的窗口，而事件仍然被吞）。layered 不影响 HUD 出画（DWM 合成，套前套后逐像素 0.44/255，把 HUD 藏起来才是 65% 像素不同） |
-| G41 | `换桌面` 子菜单的每一项**尾部多一个乱码字**（用户 2026-10-14："换桌面的菜单项尾部有乱码"）：水族箱显示成"水族"+一个替换字形、星空显示成"星"+一个 | `host.c::trim_utf8` 的本意是"`copy_str` 截断留下了半个 UTF-8 字符就把它丢掉"，写成了**无条件丢掉尾部的续字节**（`(b & 0xC0) == 0x80`）——而**任何非 ASCII 字符的最后一个字节都是续字节**，于是每个以中文结尾的标签都被吃掉最后一个字、只剩一个孤零零的前导字节（`to_wide` 把它变成 U+FFFD 的替换字形）。ASCII 结尾的标签（`主屏 2560×1440`）因此一直看不出问题 | 按**字符**判而不是按字节判：从尾部回退到前导字节、按它声明的长度算出这个字要占几字节，**只有字符串在它最后一字节之前就结束**（＝真的被截断）才把这个字整体丢掉。判据：给 `XuanDeskTray` 发 `PostMessage(hwnd, WM_APP+1, 1, WM_RBUTTONUP)` 开菜单、把光标从别处移回第一行让它展开子菜单、截屏——修前 `水族♦ / 星♦`，修后 `水族箱 / 星空`（子菜单 129 → **134 px** 宽），`显示器` 那两项前后都干净 |
-| G42 | 新加的鱼眼探针里「画幅正中那一格」的局部尺度量到 **0**，于是下游每个数都成了 `inf` / `nan`——**画面没有任何异常**，错全在探针里 | 等距方位图把 `acos(-z)` 的「方向到视轴角」当半径，而 `acos(1-ε)` 的导数在极点是**无限大**：**离极点 0.01°（1.7e-4 rad）的一步在 float32 里就是零**（`cos(1.7e-4)` 舍入成 1.0 → 半径 0 → 那一点的雅可比整块为 0，两个奇异值都成了 0，「最强/最弱」与「相对中心倍数」一起炸） | ① 局部尺度的差分步长取 **0.25°**（舍入后仍有 1e-6 量级可分辨）；② 切向**不要**再用「方位角 ± 步长」写（极点上方位角没有自己的方向，`UP×d` 也是 0）——从方向向量自己取一对正交切向量（`UP × d`，退化时换 `FORWARD × d`）。**判据**：探针里「最强/最弱尺度」变成 0 或 `inf`，先看量的那一点是不是极点 |
-| G43 | 用户报告「**地平线下的黑色没挡住银河**，好象层次不对」——地平以下那片地面上浮着一条银河，天光/星点/星座线都规矩地停在地平线上，只有银河越过去 | 银河不是一层几何、是**天球着色器里加在天球色上的一个项**（`ALBEDO = colour + milky_way(...) * band_night`），而地平以下也不是另一层，是**同一颗球下半边的另一段渐变**：那个加号不看地平，而银道有一半永远在地平以下（银心过中天 4.7 h 之后整个落下去）。星点与图线看起来"被挡住了"，那是它们**自己的**地平蒙版（`discard` / `ALPHA`），不是地面的功劳——**别按"层"找**，这颗球的地平以下没有层，只有色 | 三步，后两步都是用户看过上一版后当场改的口径：① 先按那一族的地平蒙版切掉（`smoothstep(0.0, horizon_fade, altitude)`）；② 再按「地平线下的黑调成半透，分个三层透度，代表三层纬度，每层变暗1/4」改成**三层半透膜**——`ground_span`（6°/层）/`ground_step`（每层再挡 1/4），`altitude` 一律取 `world_dir.y`（天球会转，地平只有世界方向这一种写法）；③ 层间接缝再按「三层间改成渐变」摊成 `ground_blend`（0.75°）宽的斜坡（**硬边**在两个平台上量到 -9.8/-10.2 /255 的逐行跳变，摊开后 ≤1.0/255，平台值逐像素不变）。**判据**：同机位**把改动退回去**的减图（负对照）——差值只落在地平以下（实测地面最多 **+81.5/255**、13.9 万像素 >10/255，地平以上 ≤0.23/255＝噪声底）；改三层那两次另加两条：地平以上 ≤0.99/255（同一对图的噪声底），三层在图上**量得出来**——同一列亮度在 -6°、-12° 各级掉一级 **1/4**，且那两级之间是渐变 |
-
-### 本机工具链与脚本环境
+### Godot 4.7 API 陷阱（G）
 
 | # | 陷阱 | 处置 |
 |---|---|---|
-| T1 | bash 工具跑的是 **WSL**：脚本里 `/c/...` 不存在，是 `/mnt/c/...` | 脚本内用 `/mnt/c/...`；或干脆别在脚本里调 Windows 程序 |
-| T2 | WSL **无法执行** Windows 二进制（`Exec format error`，无 binfmt） | 构建命令直接交给工具调度（`C:/mingw64/bin/gcc.exe …`），**不要写进 bash 脚本** |
-| T3 | 隐藏目录 `..tmp/tools/` 下的 exe 无法被调度执行 | 运行时放可见目录 `.tmp/tools/` |
-| T4 | `-mwindows` 链接报 `undefined reference to WinMain` | 用 `-mwindows` 就得定义 `WinMain`（本工程就是），好处是**永不弹控制台** |
-| T5 | PowerShell 里 `Add-Type` 需要 `System.Drawing` | 加 `-ReferencedAssemblies System.Drawing` |
-| T6 | PowerShell 的**函数在 Win32 回调委托里解析不到**（表现为 `GetClassName` 返回空串） | 回调内**内联**所有代码，不要在委托里调 PS 函数 |
-| T7 | `Screen.MinimizeAll()` 后截图是锁屏界面 | `LogonUI` 在跑 = 会话已锁 | 截图前先查 `Get-Process LogonUI` |
-| T8 | `gcc` 在脚本里 `command not found` | PATH 里的 `C:\mingw64\bin` 在 WSL 侧不生效；用绝对路径 |
-| T9 | 合成点击落点乱飞（一次点击打到别的按钮，甚至点到"退出"） | **本机有程序持续扰动鼠标**：`SetCursorPos` 之后几百毫秒光标就能跑掉上百 px，而 Godot 的按钮事件取的是**当时的实时光标位置** | ① 驱动 HUD 用 `.tmp/tools/click.ps1`（向窗口 `PostMessage` WM_MOUSEMOVE/LBUTTONDOWN/UP，**完全不碰光标**）；② 能不用点击就不用：截图/校验走 `--shot` + `--background=<id>` |
-| T10 | 按进程量 GPU 时量错了对象（旧的控制台壳 `godot_console.exe` 只是壳，真身是它拉起来的子进程） | 按进程量 GPU（`\GPU Engine(*)\Utilization Percentage`）时用**错 PID 会一直读到 0** | 真 PID 看 `%LOCALAPPDATA%\XuanDesk\host.log` 里的 `host start: ... pid=NNNN`（那是 Godot 自己报的 `OS.get_process_id()`）；计数器要 `-MaxSamples` 取样，一次性的 `Get-Counter` 常返回 0 |
-| T11 | 判断"星点到底画出来没有"：肉眼看不见、按亮度阈值统计也会被天光/银河梯度淹没 | 星点是小而亮、梯度是大而暗，量纲不同 | 用两招：①**点状极大值**（某像素比 ±3px 邻域亮 30 以上）；②与"无星版本"截图**逐像素差分** |
-| T15 | 在**开着的壁纸进程还用着日志文件**时重跑工具脚本，`Remove-Item host.log` 报"正由另一进程使用"，`$ErrorActionPreference="Stop"` 下整段脚本直接终止（采样/退出步骤全没跑，留下一份挂在桌面上的壁纸进程） | 脚本不要删别人的日志（读最后一行即可）；跑完先确认 `Get-Process godot,godot_console,host` 为 0 再开下一轮；每轮都有 `Ctrl+Alt+Q` + 计数收尾 |
-| T16 | 按 PID 取 GPU 计数器，读回 **14,314,909 %** 这种数字 | `Get-Counter -ListSet 'GPU Engine'` 的 `PathsWithInstances` 里**不止一个计数器**：除了 `Utilization Percentage` 还有原始计数型的 `Running Time`，按 PID 过滤后一路 `-Maximum` 混在一起 | 路径要**同时**按 PID 与计数器名过滤（`-like "*pid_NNN*" -and -like "*utilization percentage"`）；逐实例直接 `Get-Counter -Counter $paths` 轮询并自己求均值，别用 `-MaxSamples` |
-| T17 | `curl` 拉 CDS（`cdsarc.cds.unistra.fr`）直接失败：`schannel: … CRYPT_E_REVOCATION_OFFLINE (0x80092013)`，连接都没建起来 | 本机 Windows 侧 schannel **连不上吊销服务器**，而默认策略要查吊销 | `curl --ssl-no-revoke`（VSOP87B 与 BSC5 都是这么拉下来的：**半截文件不会报错**，续传用 `-C -`，落地后按字节数核对，别只看 HTTP 200） |
-| T18 | 按名字杀进程后，桌面上还剩一个**还在渲染的**实例：新开的那个与它抢同一个 WorkerW，于是"截图与日志对不上""点了菜单没反应" | 进程名带点（真身是 `godot.windows.opt.tools.64.exe`，tasklist 会截断成 `godot.windows.opt.tools.6`），按 `godot.exe` 这种名字杀**杀不完全** | 用 `.tmp/tools/xuankill.ps1`（`Get-Process | Where-Object { $_.ProcessName -like '*godot*' -or $_.ProcessName -eq 'host' } | Stop-Process -Force`，跑完自己复检并打印 `clean`）；**每轮开跑前先跑它** |
-| T19 | 手摆的 chip 尺寸不对：要 `60×24` 的按钮量出来是 **`60×31`**，换字号也不动（13/16/20 全是 31） | ① **Button 永远不会小于自己的最小尺寸**，而**进树之前**那套最小尺寸来自**默认主题**（不是我们 override 的样式盒）——先用默认值把尺寸夹到 31，之后最小尺寸降下来**它也不会自己缩回**；② 样式盒的内容边距默认还会再加十几 px | 两半都要治：`StyleBoxFlat.set_content_margin_all(0)`（`SkyCompassHud._box`）让 24 px 高的 chip **合法**，**`add_child` 之后再设 `position`/`size`** 让它**不被夹**。判据：探针读回每颗按钮的矩形，与设计值逐颗比对 |
-| T20 | 盘**右上角**的 `↘` 箭头 chip 看不见、点了没反应 | 壳的 `菜单` 曾是**独立 OS 窗口**，glue 在 HUD 内容右上角——窗口在 HUD **之上**，压在 `↘` 的字形上：字被盖住、点击也归它 | 当时的解是 `MENU_TOP = -28`（菜单悬在内容上方，让开盘角），第二十一轮收回到 -20。**2026-10-13 整条退休**：菜单进了托盘，HUD 右上角不再有第二扇窗（出图核过：`--shot-target=hud` 的 300×340 里两颗转角箭头都在、无遮挡）。教训仍在：**叠在别人的窗口上，就是会赢它的字形和点击** |
-| T21 | 用 `PostMessage` 驱动**托盘菜单**时"点了没反应"（2026-10-13） | ① 回调语义按**默认通知版本**：`wParam`=图标 id、`lParam`=鼠标消息（`WM_RBUTTONUP`）——`NIM_SETVERSION`(4) 之后 `lParam` 变成坐标打包；② 菜单开在**光标处**，光标停在菜单左上角时第一行**已经是热的**，要**先移开再移回来**才会展开子菜单；③ 子菜单往哪边开看有没有地方：**屏右边开在左、屏中开在右**；④ 本机那个置顶的时钟 App 会**盖住任务栏角上的菜单** | 开菜单：`PostMessage(hwnd, WM_APP+1, 1, WM_RBUTTONUP)` 给 `XuanDeskTray`；点行用真鼠标点像素；判据取 `host.log` 的 `tray: …` 与**客户端那行日志成对**出现（README「验证」有一行专讲这个手法） |
+| G1 | `TCPServer` 没有 `poll()` | 用 `is_connection_available()` / `take_connection()` |
+| G2 | shader 里 fragment 阶段认不得 `INSTANCE_CUSTOM` | 它只在 **vertex** 阶段可用；要用就自己声明 varying 传下去 |
+| G3 | `SurfaceTool` 顶点的法线格式不一致就报错 | 顶点格式在第一个顶点处锁定：要么每个顶点都 `set_normal`，要么都不设再 `generate_normals()` |
+| G4 | 顶点色明明深蓝，渲染出来一片白 | shader 里的顶点色是**线性空间**：按 sRGB 写的调色板要 `.srgb_to_linear()` |
+| G5 | 换了着色器还是纯白 | `MultiMeshInstance3D` **必须显式给 `material_override`** |
+| G6 | 入树前 `look_at()` 报错 | 用 `Basis.looking_at(dir, up)`，或先 `add_child` |
+| G7 | host 按标题找不到窗口 | 按「**进程 PID + 标题前缀**」匹配：`Window.title` 会覆盖 `DisplayServer.window_set_title()`，debug 构建还会追加 `" (DEBUG)"` |
+| G8 | Godot 建的 overlay 窗 `IsWindowVisible = false` | host 启动后一次性 `ShowWindow(SW_SHOWNOACTIVATE)`（只做一次，否则后续隐藏会被顶回来） |
+| G9 | 隐藏再显示 HUD 后置顶/穿透样式丢失 | Godot 隐藏 `Window` 会**销毁原生窗口**、再显示是新 HWND ⇒ 不缓存 HWND，host 每 5s 重套样式 |
+| G10 | 截图拿到上一帧或黑图 | 先 `await RenderingServer.frame_post_draw` 再取图 |
+| G11 | 新克隆/新目录报 `Could not find type "X"` | 跑一次 `--headless --path . --import` |
+| G12 | `.godot/imported/` 里堆满运行时截图与数据 | 纯运行时目录放 `.gdignore` |
+| G15 | `Window.render_target_update_mode` 报"不存在" | 该属性只在 `SubViewport` 上；用 `RenderingServer.viewport_set_update_mode(viewport_rid, …)` |
+| G16 | 星点之外的透明物完全不渲染、且无任何报错 | 不透明几何**不要**用 `depth_draw_never`（会被归入透明队列、最后画并盖掉星点） |
+| G17 | `--headless` 下探针读回的 MultiMesh 实例全是 0 | headless 用 `RendererDummy`：要读回顶点/实例数据的探针跑真渲染器 |
+| G19 | `--script` 探针"卡死"，没有输出 | 多半是 `Parse Error` 让 `_init()` 没跑、`quit()` 永不执行：探针配 `timeout`，先看有没有 `SCRIPT ERROR` |
+| G20 | `PlaneMesh` 建的"面向相机的圆面"完全不出现 | 它默认 `FACE_Y`（水平）⇒ 显式 `mesh.orientation = PlaneMesh.FACE_Z` |
+| G21 | 缩放星空后星点成团、星座细带变宽 | 天球几何是按固定视场建的：vertex 里按归一方向缩放，`size_scale = fov / BASE_FOV` |
+| G23 | 盘上的字全挤在左上角，但 `draw_circle` 是对的 | 极坐标点要写 `CENTRE + dir * R`，不是 `dir * R` |
+| G24 | 探针"多一个刻/少一个刻"，图上却好好的 | 跨 0°/360° 缝时算术平均无意义：角度平均一律用圆均值 |
+| G25 | 只读等距刻的探针在任意 15° 整数倍方位上都通过 | 要留**一个唯一标记**（本项目是"子/北"那根青刻）来读数，并把"换个方位声明同一张图"当负对照 |
+| G26 | 银河画成烧白的发丝线 + 糊光 | 凡"点积 + `asin`/`pow`"的向量函数，先 `normalize`（半径 500 会被 `pow(…,2.5)` 放大成 5590） |
+| G27 | 改完 `.gdshader` 整屏黑，进程与退出码全正常 | shader 编译错误只往 stderr 打一行、材质静默退化：改完 grep `shader error` |
+| G29 | `--shot` 跑完、退出码 0，就是没有图 | 用户参数必须写在 `--` 之后 |
+| G31 | 星座连线穿到隔壁星座、大量自交，但"什么都不缺" | 错在**连接关系**：判据要几何化（球面多边形"点在多边形内" + 大圆采样 + 自交检测），按传统图形重排 |
+| G32 | `--sky-time` 出图"整片天转了半圈" | 它按 **UTC** 解析，而 HUD 的时辰/四柱是本地时间：出图一律写 UTC 或给 unix 秒 |
+| G33 | 照"跨度更大"的直觉选 Table 2 的根数，天王星差到 1018″ | JPL 两版近似根数**由使用窗口决定**：1800–2050 那版（Table 1）在每一项上都更准 |
+| G34 | `--shot=<路径>` 报 `err=7`、连 `err=0` 那条打印都没有 | 写盘不会建目录：落点目录先建好 |
+| G35 | 按一个开关，别的层的东西一起消失 | 开关只关它自己说的那件事；往已有开关的层里加东西前先问"这个名字还成立吗" |
+| G36 | 换屏/宿主重贴窗口后，`ON_DEMAND` 的背景整块不画 | 窗口被外力改尺寸不会有人再要一帧：这些动作之后主动 `request_redraw()` |
+| G37 | 新加的一层整层不见，进程照跑、出图照出 | 数组字面量取出的元素要**显式打类型**（推不出类型的那条 `Parse Error` 会拖垮一串脚本）；排查看完整 stderr |
+| G38 | 探针里行星位置全是 `nan` | `Astro` 里有两套时间戳：Unix 秒要走 `julian_day_from_unix()`（JD 应在 2.4e6 附近） |
+| G39 | `--script` 探针在 `_initialize()` 里就建场景 → "全中"其实假通过 | 那时树还没入、`get_frustum()` 是空数组（对任何点都返回 true）：活放在 `_process()` 第一帧 |
+| G40 | 穿透打开了，点击既不到 HUD 也不到下面的进程 | `WS_EX_LAYERED \| WS_EX_TRANSPARENT` 两个一起才跨进程；判据要真点一下、让对方**自己**记下 `WM_LBUTTONDOWN` |
+| G41 | 托盘菜单项尾部多一个乱码字 | UTF-8 截断要**按字符**判：按字节丢续字节会吃掉每个中文标签的最后一个字 |
+| G42 | 鱼眼探针在画幅正中的尺度量到 0，下游全成 `inf`/`nan` | `acos` 在极点的导数无限、float32 舍入成 0：差分步长取 0.25°，切向量从方向向量自己取正交对 |
+| G43 | 地平以下浮着一条银河，天光/星点却规矩地停在地平线 | 银河是天球着色器里的一个**加项**、地平以下不是"层"而是色：地面改半透膜（三层、每层挡 1/4、缝上渐变） |
+| G13/G14/G28/G30 | 一整套"把窗口粘在窗口上"的坑（嵌套 Window 只画第一帧、`unfocusable` 丢点击、`z_index` 只管画不管点、非激活窗里原生弹窗不出现） | **已随菜单搬进托盘全部退休**。教训留着：叠在别人的窗口上，就会赢它的字形和点击，能不做就不做 |
 
-换台机器以后（2026-10-14，**第二台：工程在 `C:/Work/desktop`，gcc 是 `C:\Program Files\mingw` 下的 7.3.0**，不是 `C:/mingw64` 的 15.1.0）多出来的三条：
+### 本机工具链与脚本环境（T）
 
 | # | 陷阱 | 处置 |
 |---|---|---|
-| T22 | `native/build.cmd` 里 `windres` 报 `preprocessing failed`，前面还夹着一行 `'C:\Program' 不是内部或外部命令` | windres 预处理 .rc 用的是**自己旁边那个 gcc**，并把它的**完整路径原样拼进命令行**——gcc 装在 `C:\Program Files\...` 下就被空格劈开。`--preprocessor` 换掉的是**整条命令**（不是只换程序），所以要写全才行 |
-| | | `--preprocessor="gcc -E -xc-header -DRC_INVOKED"`，并先把 gcc 自己的目录塞到 PATH 最前，让 PATH 去解析那个 `gcc`（`build.cmd` / `build.sh` 里已经带上） |
-| T23 | 同一台机器 `bin\host.exe` 链得出，指标帧里的 `seq` / `mem_used` / `mem_total` / `up` 却是垃圾数 | 老 mingw-w64 gcc（7.x）**默认不用自己那套 ANSI printf**：`%llu` 直接落到 msvcrt 的 printf，而它不认 `ll`。当时 `-Wall` 就报了 `unknown conversion type character 'l'`，很容易被当成噪音划过去 |
-| | | 编译加 `-D__USE_MINGW_ANSI_STDIO=1`（新工具链上本来就是默认，等于空操作）。**判据**：那条 `gcc -Wall` 命令行**一行输出都不该有** |
-| T24 | 全新克隆的机器上 `run.bat` 起得来，但**桌面浮在图标上面、HUD 也不出现**（用户 2026-10-14 报的就是这一条） | `bin/host.exe` **不在 git 里**（`*.exe` 被忽略，要 `native/build.cmd` 现建），于是没有东西把窗口挂进 WorkerW（壁纸变成普通窗口）、没有东西 `ShowWindow(SW_SHOWNOACTIVATE)`（G8：Godot 建的 overlay 窗 `IsWindowVisible = 0`）、也没有托盘和热键——**两条症状同一个根因**，界面上只表现为"没生效" |
-| | | 先看 `%LOCALAPPDATA%\XuanDesk\host.log` **在不在**：文件根本不生成就是宿主没起来（客户端那一侧是 Godot 自己 `logs/godot*.log` 里的 `Could not create child process` ＋ `could not launch bin/host.exe`）。装一台机器三步：`native/build.cmd` → `--headless --path . --import` → `run.bat` |
+| T1 | bash 工具跑的是 WSL：`/c/...` 不存在 | 用 `/mnt/c/...`，或干脆别在脚本里调 Windows 程序 |
+| T2 | WSL 执行不了 Windows 二进制 | 构建命令交给工具调度，别写进 bash 脚本 |
+| T4 | `-mwindows` 链接报 `undefined reference to WinMain` | 用 `-mwindows` 就得定义 `WinMain`（本项目就是），好处是永不弹控制台 |
+| T8 | 脚本里 `gcc` 报 command not found | PATH 在 WSL 侧不生效：用绝对路径，或让 `build.cmd` 自己把 mingw 塞进 PATH |
+| T9 | 合成点击落点乱飞（本机有程序持续扰动鼠标） | 驱动 HUD 用 `PostMessage` 点击（完全不碰光标），或改走 `--shot` + `--background` |
+| T10 | 按进程量 GPU 一直读到 0 | 真 PID 看 `%LOCALAPPDATA%\XuanDesk\host.log` 里的 `pid=NNNN`；计数器要连续取样 |
+| T11 | 判断"星点到底画出来没有" | 点状极大值（比 ±3px 邻域亮 30 以上）+ 与"无星版本"逐像素差分 |
+| T17 | `curl` 拉 CDS 报 `CRYPT_E_REVOCATION_OFFLINE` | `curl --ssl-no-revoke`；落地后按字节数核对（半截文件不会报错） |
+| T19 | 手摆的 chip 比设计尺寸高（要 60×24 量出 60×31） | `Button` 不会小于自己的最小尺寸，且样式盒还有内容边距：`set_content_margin_all(0)` + **`add_child` 之后再设 `position`/`size`** |
+| T22 | `windres` 报 `preprocessing failed`，前面夹着一行"命令不是内部或外部命令"（gcc 装在带空格的路径下） | 它用**自己旁边那个 gcc** 预处理 .rc，并把那条路径原样拼进命令行：`--preprocessor` 换的是整条命令，要写全并让 PATH 去解析 |
+| T23 | `bin/host.exe` 链得出，指标帧里的 `seq`/`mem_*`/`up` 却是垃圾数 | 老 mingw 的 `%llu` 落到 msvcrt：加 `-D__USE_MINGW_ANSI_STDIO=1`（判据：`-Wall` 一行输出都不该有） |
+| T24 | 新机器上 `run.bat` 起得来，但桌面浮在图标上面、HUD 不出现 | `bin/host.exe` **不在 git 里**（`*.exe` 被忽略）：装一台机器三步 = `native/build.cmd` → `--headless --path . --import` → `run.bat`；先看 `%LOCALAPPDATA%\XuanDesk\host.log` 在不在 |
 
 ---
 
@@ -762,29 +450,17 @@ HUD 的按钮、以及**宿主搬动/改尺寸窗口之后**（G36：`_on_screen
 
 改完必须**跑起来看**：判据是"屏幕上/数字上真的变了"，不是"代码看起来对"。
 
-| 手法 | 用在哪 | 判据 |
-|---|---|---|
-| **出图** `--shot=<png> --shot-frames=N --wallpaper=0 --hud=0 --sky-time=<UTC> --sky-rate=0 --sky-view=<方位>,<高度>` | 星空的任何一层 | 主视口存 **2560×1440**；`--shot-target=hud` 存 HUD 窗（**300×340**）；`.tmp/shots/` 要先存在（G34） |
-| **减图**（同机位两张逐像素差） | 隔离一个开关/一层的贡献 | 差值只落在想量的那块；配一张**把改动退回去**的图当负对照 |
-| **开关 A/B 出图**（同一瞬刻、同一机位两张，只改 `--sky-mansions`） | 盘上 `星宿` 那颗开关的两端各画什么（2026-10-14：廿四节气名、斗的两套名字、赤道分野名） | 两张只差一个参数：**开**（默认）→ 斗的八颗星是**神名** `贪狼/巨门/禄存/文曲/廉贞/武曲/破军` + 左辅的 `洞明`（挂在开阳**下方**、小一档），黄道那一带有**节气名**（`--sky-time=2026-10-14T14:00Z`、那一轮的默认 `180°,35°`、fov 80 画幅里读到 **9** 个：小满…大寒；`--sky-fov=179` 的天顶图里黄道整圈入画，从 `霜降` 一路排到 `夏至`），赤道上每个分野的中点挂着那个宿的**淡金**名字（`危/虚/女/牛/斗…`，与星团处的**金**名同屏成对，如 危 两处、虚 两处）；**关**（`--sky-mansions=0`）→ 同八颗星换回**星名** `天枢/天璇/天玑/天权/玉衡/开阳/摇光` + `左辅`、**节气名与分野名一个都没有**、星官名也没了，只剩行星名、两条地支环与**赤道本身**（淡赤大圆 + 淡金分野刻照旧在）。图：`lbl_dip2_{on,off}.png`、`lbl_term{_on,_off}.png`、`lbl_term_all.png`、`lbl_eq_{on,off}.png` |
-| **逐像素取样一个色**（两图只差一条线的颜色，比同一点的前后值） | 赤道由暗蓝改**淡赤**（2026-10-14） | 同一机位、同一瞬刻、只换那一支色：赤道线上一点 `(1200,446)` 由 **`16,34,79`（偏蓝）**变 **`73,45,76`**——ΔR **+57**、ΔG **+11**、ΔB **−3**，也就是这条线加出来的量从蓝转到红；两张整幅 mean \|Δ\| **0.151/255**（其余像素没动） |
-| **常驻探针** `--script res://backgrounds/sky/projection_probe.gd` | 天球 → 屏的投影（用户那两条：**转方向＝绕天顶刚性旋转**、**走时间＝绕北极星转**，加尺度、地面、画幅宽） | **27 行**逐条打印 pass/FAIL，**退出码 = 失败行数**；每条都拿 **`lens` 当负对照**或对着它自己的算术：径向尺度（离轴 20/45/70° 三处都是 **15.000 px/°**）、形状拉伸＝`rho/sin rho`（三处都到小数点第三位）、转 10° 的残差（开场 **3.38%**、朝天顶 **0.00%**，`lens` **58.14%**）、2° 双星走 3/4 天的间距漂移（**39.06%** vs **201.55%**）、地平线的弧与地面占比（414 px / 16.95%）、画幅比 frustum 宽（画幅的边离轴 **85.3°**、四角 **97.9°**，相机自己那张 gnomonic 的边只有 **63.1°**——**194** 个方向在画上却在框外（那套 72×37 个方向里 873 个落在画上）、最远到离轴 **96.5°**，`lens` 0 个）、四支网格的取舍表（中间尺度/最差尺度/形状/转的残差/天数/天顶→地平线）一并打印；**这一轮新加的两条**：① 地支环那一个字的线盒（照字体问出来的 **20 px** ＋ `SkyBranches.GAP` 1.0）要落在任务栏上沿以上的那点地面里——量到 **34.5 px＝1.68 个字**；② 节气刻站在黄道的北侧、而北在屏上是"上"（开场这一档画幅里的 13 个节气全朝上，反过来的 0 个）。**探针里的相机自带 2560×1440 的 `SubViewport`**（2026-10-12 修）：`--headless` 的根视口是方的，而镜头那一支要读 `camera.get_camera_projection()`，不套视口时它的横向尺度会差整个画幅宽高比（实测同一方向落在 x 384 而不是 776） |
-| **对照场景** `res://backgrounds/sky/sky_view.tscn` | 球面看起来对不对（正式场景，与 .tmp/tests/sample.tscn 同格式：`SkySphere` + `Camera3D`） | 出图量：球上有星、地平线与地面占比与壁纸同图；**CPU 与 GPU 同图用亮星当尺**（默认这一支：六颗亮星的最亮像素质心与 `SkyProjection` 预测最差 **0.99 px**；球幕那一支曾差 648 px＝绕画面中心 180°，那条坑见「投影」一节） |
-| **两张图量一个动作**（同一瞬刻出两张，只改视角/时刻，逐颗星找质心） | 用户那两条动作本身（不只是 CPU 的算术） | ① 转 10°（35°/80 那一轮的南天取景）：每颗星到天顶那点的**半径差 2.45%**、绕它走 **7.1…9.8°**（CPU 预测的落点与图上最亮像素差 ≤1 px）；② +6 h（把视轴转向北 `0,40`，让转轴在画里）：**北极星只挪 16.03 px**（它离极 0.7°，四分之一圈本来就该带它 17.8 px），离极一整圈外的一颗被带走 **1021 px**。判据是“图上”的数，不是探针里的数 |
-| **点状极大值**（某像素比 ±3px 邻域亮 30 以上） | "星点到底画出来没有" | 点光与小而亮的量纲和梯度（天光/银河）不同，纯阈值法会被淹没（T11） |
-| **headless 探针** `--script res://<现写的>.gd` | 数值与状态（历法、排盘、相机、时钟、按钮几何） | 探针**写文件**（`user://`）再读——编辑器版 Godot 的 stdout 进不了管道；配 `timeout`，看不到输出先看有没有 `SCRIPT ERROR: Parse Error`（G19） |
-| **引擎驱动** `--fixed-fps 60` + `await process_frame` | 动画类（转向、时辰步进） | 每帧打印状态，与 `1−e^(−k·t)` 逐帧对；结束后**不再发信号**才算回到静默 |
-| **进程内按真钮 / 按盘自己的锚点取像素**（`--script` 里 `instantiate()` 那份 `res://shell/main.tscn`、等 HUD 建好，再 `button.pressed.emit()`，最后抓 `HudWindow.get_viewport().get_texture()` **并按卡自己报的锚点读图上的像素**） | HUD 上的钮真的按到、真的改了、真的画到了窗上；盘上某个标记的墨是不是它该有的那一支（2026-10-14：`>>` 换标签、分野刻没了、五星的五行色、月牙） | 起的是**真 HUD 窗**（`--wallpaper=0 --hud=1`，300×340）。① 按 `>>` 五次，标签一次次打印 `时辰−/时辰+ → 日−/日+ → 月−/月+ → 年−/年+ → 时辰−/时辰+`，每一步之前抓一张（`hud_cycle_0…4.png`），右列 `crop` 4× 出来逐字读——**打印的字与图上的字一致**才算通。② 同一套里把 `SkyCompassHud.CENTRE`/`R_*` 与 `_bodies` 给的方位拼出屏幕点，**读那一像素**：`tick band r 117…129` 暖色 **0** px（分野刻没了）、冷色 9256 px；五星的墨逐个对上自己的五行色（地平线下的土星 = 自己 ×0.3）；月位抠 40×40 放大 6× 是月牙。**两个坑**：钟与星的**坐标要从卡自己的常量算**（写死就会量到别处）；地平线下的点在 30% 亮，**取中心像素，别取窗口里最亮的**（旁边一根刻比它亮，当轮取到邻居）。**从外面点这扇窗不成**：`click.ps1` 往 `XuanDesk.HUD` 的 client (276,236) PostMessage，第一下之后窗就没了（shot 已落地退出）、图上的标签还是 `时辰`——所以这条路记在这里是"别用"，改走进程内按（`--script` 不改工程代码、不动鼠标） |
-| **托盘菜单：从外面点自己的图标**（`PostMessage(hwnd, WM_APP+1, 1, WM_RBUTTONUP)` 给 `XuanDeskTray`，再用真鼠标点像素） | 通知区那条路（2026-10-13） | ① `host.log` 有 `tray icon added`，`HKCU\Control Panel\NotifyIconSettings` 里出现 `ExecutablePath=…\bin\host.exe` 那条；② 弹出菜单的窗口（类名 `#32768`）矩形可量、行数与勾选与客户端状态一致（`换桌面` 子菜单里星空的钩会跟着切换走）；③ 点一行后 `host.log` 打 `tray: background sky`、**客户端**跟着打 `background 'sky' built`——两行都对才算这条链通了；④ 关掉菜单用 Esc（`TrackPopupMenu` 返回 0 = 没选东西，不发事件） |
-| **对权威** | 日月行星 | JPL Horizons `QUANTITIES='1'`（astrometric RA/Dec，geocentric：`CENTER='500@399'`），`TLIST` 传一组 JD，逐点算角距 |
-| **字位 A/B**（同一瞬刻两张 HUD 出图：`--sky-time` 固定 + `--sky-rate=0`，按 `_build_plate()` 给的锚点**只数暖色墨**） | "这张卡的排法动没动"（2026-10-13 换字飞转时立的判据） | **整幅逐像素差会被表针污染**（两次运行的墙上时钟不同）→ 只数暖色墨（环字与马是琥珀/金/红，表针是冷白），并配**同一份代码两次运行**的负对照（实测噪声底 1…24 px/字、整幅 0.96…1.04/255，分档 ≈ 487/529/28）。改动前后：环上 **13/13** 字的暖色墨完全相同、整幅 0.945 vs 负对照 0.957。**另一个坑**：把一行字放进 `draw_set_transform` 再画，位置看着一样而**栅格化不一样**（实测 24 行各差 3…57 px）——静止的字一律直接给绝对锚点 |
-| **负对照** | 每一条断言 | 探针自己也要被怀疑：等距刻在 15° 旋转下不变（G25），所以盘上留了一个唯一标记（"子/北"那根青刻）来读数 |
-| **停壳减图**（桌面跑着的时候截一张 → `Stop-Process` 掉 godot 与 host 再截一张 → 逐像素差） | "3D 桌面到底上没上屏"（也就是 W7 那条：系统壁纸照片会盖住我们） | 与 HUD 无关的左半边差 **99.2%**、右下角 **99.4%**、最底下那条 **99.4%**（2026-10-14 第二台机器）⇒ 整块屏都是我们画的。**被系统壁纸照片盖住时这个数会≈0**——它是这条唯一能分辨"挂成功了但看不见"的判据。角落那两块不是凑数：窗口若只有虚拟化出来的 `1536×864`（宿主 DPI 不感知，面板实为 1920×1080 @125%），右/下那 20% 就不会动。结构那半边更省事：`Progman` 的子窗口序 `SHELLDLL_DefView@0 … WorkerW@3`，我们的窗口在这个 WorkerW 里 ⇒ 壁纸层在图标层**之后**（z 序更下）＝图标在上 |
-| **跨进程穿透**（HUD 下面摆一个**另一个进程**的窗口，再用 `SendInput` 真点一下 HUD 上的点） | `穿透` 那条路（2026-10-13，G40） | 目标窗**自己写日志**才算数：穿透开 → 它记下 `WM_LBUTTONDOWN`；穿透关 → 它一条都没有、`WindowFromPoint` 回 HUD。两处干扰要处理：① 点击前先 `SetWindowPos(HWND_TOP)` 把目标提上来（别的 App 的窗口会插到它上面，第一轮就是这么误判的）；② "HUD 还画着"不能靠"没崩"，要**把 HUD 藏起来再显示**做减图（藏起来 65.3% 像素不同、显示回去 0.5%＝动画表针） |
+| 手法 | 判据 |
+|---|---|
+| **出图** `--shot=<png> --shot-frames=N --wallpaper=0 --hud=0 [--sky-time=<UTC> --sky-rate=0 --sky-view=<方位>,<高度>]` | 主视口 2560×1440；`--shot-target=hud` 存 HUD 窗；落点目录要先存在（G34） |
+| **减图**（同机位两张逐像素差） | 差值只落在想量的那块；配一张"把改动退回去"的**负对照** |
+| **开关 A/B 出图**（同一瞬刻、只改一个参数） | 隔离开关/一层的贡献，看两端各画了什么 |
+| **常驻探针** `--headless --path . --script res://backgrounds/sky/projection_probe.gd` | 逐条打印 pass/FAIL、**退出码 = 失败行数**；每条都拿 `lens` 当负对照（径向尺度、形状拉伸、转 10° 的残差、间距漂移、地平线的弧与地面占比、画幅比 frustum 宽、四支的取舍表） |
+| **现写探针**（用完即删） | 结果 dump 成文件再比（编辑器版 stdout 进不了管道）；配 `timeout`，看不到输出先看 `Parse Error`（G19） |
+| **进程内按真钮 / 按卡自己的锚点取像素** | 起真 HUD 窗（`--wallpaper=0 --hud=1`），`button.pressed.emit()` 后抓窗纹理，按卡自己报的锚点读那一像素（坐标要从卡自己的常量算，写死就会量到别处） |
+| **对权威** | 日月行星对 JPL Horizons 的 astrometric RA/Dec：实测太阳最差 16.83″、月亮 10.11″、行星 1800–2050 抽 20 日 < 5′ |
+| **跨进程穿透** | HUD 下面摆一个**另一个进程**的窗口，`SendInput` 真点：穿透开它记下 `WM_LBUTTONDOWN`，关则一条都没有 |
+| **停壳减图** | 桌面跑着时截一张 → 杀掉 godot 与 host 再截一张：与 HUD 无关的区域差 ~99% ⇒ 整块屏都是我们画的；被系统壁纸照片盖住时这个数 ≈ 0（W7 的唯一判据） |
+| **负对照** | 每一条断言都要能被反过来证伪（等距刻在 15° 旋转下不变，所以盘上留了"子/北"那根青刻来读数，G25） |
 
-碎图与探针**用完即删**（探针里那些"临时改一个常数再减图"的开关同理）；跑完整套前先确认没有遗留进程
-（`.tmp/tools/xuankill.ps1` 打印 `clean`，即 `Get-Process | Where ProcessName -like '*godot*' -or -eq 'host'` 为 0）。
-第二台机器那条（T24）留的是 **`layer_on.png` / `layer_off.png`** —— 同一台桌面、壳跑着的那张与杀掉壳后的那张，
-就是「停壳减图」那一行的两张底图。同机的探针（`.tmp/tools/deskprobe.ps1` 读 Progman 的子窗口序、
-`.tmp/tools/imgdiff.ps1` 逐像素差、`.tmp/tools/frame_probe.ps1` 自己当客户端读一帧指标）也留在那儿。
-`.tmp/shots/` 里现在留着 **2026-10-14 那一轮鱼眼的图**（`fy_open.png` 那一轮的开场（35°/80）、`fy_az190.png` 转 10°、`fy_pole.png` 北极星那一片、`fy_pole_t06.png` +6 h、`fy_{lens,pan,cylinder}.png` 三支对照、`fy_straight.png` 视轴压到地平线上、`fy_view.png` 对照场景、`fy_hud.png` 盘面）**和银河那条地平层的对照**（同一瞬刻 `2026-10-22T12:24Z`、同一机位：`mw_before.png` 银河整片压在地面上 / `mw_steps.png` 三层硬边那一版 / `mw_layers.png` 现在这三层渐变；`mw_ground_ab.png` 把这三张的地面区拼成一张，上→下＝之前 / 硬边 / 渐变）；更早那些（`c3_*` / `p_*` / `m_*`）只是当时的留痕，数字与判据照旧有效，图不再补；本轮（2026-10-14 廿四节气 + 斗的两套名字 + 赤道三支墨）留的是 `lbl_*` 那七张（`lbl_eq_{on,off}.png` 是赤道那两张）；**步长单位那一轮**留 `hud_unit.png`（`--shot-target=hud` 的整张 HUD）+ `hud_unit_crop.png`（右列 5×）、`hud_cycle_{0..4}.png`（进程内按 `>>` 五次的真 HUD 窗）+ `hud_cycle_{1,3}_col.png`（右列 4×）；**天空取景那一轮前半（44°/93° ＋ 淡白天顶虚十字）**留的是 `frame_93_44.png`、`view_93_small.png`（半尺寸）、`cross_off93.png`（天顶十字 6×），**同一轮后半（42.5°/96° ＋ 任务栏以上露一个字 ＋ 两支刻收短）**留的是 `frame_96_42.5.png`（默认那一帧）、`frame_96_fixed.png`（同一帧钉在 `2026-10-14T14:00:00`，刻的像素读数用它）、`bottom_marks.png`（底中 4×、画了任务栏那条红边：`午` 清楚、`南` 被削）、`tick_mansion2.png`（赤道分野刻 4×）、`tick_term2.png`（黄道节气刻 2×）；**刻度和五星那一轮**留 `hud_nomansion.png`（分野刻去掉后的整张 HUD）+ `hud_nomansion_zoom.png`（整张盘 3×）、`hud_moon_zoom.png`（月位 40×40 放大 6× 的月牙）。挡 importer 的 `.gdignore` 在 `.tmp/` 上（G12/G34）。
+碎图与探针**用完即删**；跑完整套前先确认没有遗留进程（`*godot*` 与 `host` 全为 0）。

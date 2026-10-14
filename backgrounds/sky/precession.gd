@@ -1,16 +1,14 @@
 ## Precession between standard equinoxes, IAU 1976 angles (Meeus, Astronomical
 ## Algorithms, chapter 21).
 ##
-## The constellation boundaries are published for B1875 (Delporte 1930) while the
-## star catalogue is J2000, so the boundary corners have to be carried forward
-## before they can sit on the same sphere as the stars. S3 will want the same
-## machinery to move the whole sky to an arbitrary date.
+## The star catalogue is J2000 while the sky is drawn at an arbitrary instant, so
+## every position the clockwork hands out is precessed from J2000 to that date
+## (Astro.rotation). (A second user, the Delporte boundary corners referred to B1875,
+## was retired with the boundary layer in 2026-10-15 along with the B1875 epoch.)
 class_name Precession
 extends RefCounted
 
 const J2000 := 2451545.0
-## Julian date of B1875.0, the equinox the boundary catalogue is referred to.
-const B1875 := 2405889.25855
 
 
 ## Precess equatorial degrees from one equinox to another and return the

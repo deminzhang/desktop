@@ -1,5 +1,5 @@
 ## The ecliptic - the Sun's yearly path on the celestial sphere - and the
-## divisions that hang off it (计划 §6.4 rings, §6.5 S6).
+## divisions that hang off it (README「HUD 罗盘规格（自内向外）」 rings, README「星点、记号与取舍」).
 ##
 ## One number runs through all of it: solar longitude λ, the same angle the Sun's
 ## ephemeris reports. The twelve 宫 are λ in 30 deg steps from the vernal equinox,
@@ -43,7 +43,7 @@ const TICK_SHORT := 0.45
 
 ## Additive and dim like the figures, but warm: the ecliptic is the one line on
 ## the sky that is about the Sun. Linear, like every vertex colour in the sky
-## (计划 §2.3 G4).
+## (README G4).
 const COLOUR := Color(0.130, 0.092, 0.030)
 
 ## The twelve signs, 30 deg of λ each, from the vernal equinox (白羊 = Aries).

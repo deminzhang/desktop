@@ -1,11 +1,11 @@
-## The twenty-eight 宿 (计划 §6.5 S6): the equatorial divisions of the Chinese sky.
+## The twenty-eight 宿 (README「星点、记号与取舍」): the equatorial divisions of the Chinese sky.
 ##
 ## Each 宿 opens at its 距星 - the "determinative star" its span is measured from -
 ## and runs to the right ascension of the next one's, so the 宿度 are the 距星's RA
 ## spans and the divisions are equatorial rather than ecliptic (the ecliptic's own
 ## 十二宫 and 廿四节气 are Ecliptic's). The 距星 are named here by designation alone
 ## and their positions are looked up in the star catalogue the sky already carries,
-## so this file adds no coordinates and no third-party data (计划 §6.3's red line).
+## so this file adds no coordinates and no third-party data (README「数据源与许可」's red line).
 ##
 ## The classic 宿度 - 角 11.83°, 井 32.53°, 觜 1.97° as the shortest of them - come
 ## out of these spans to within a degree or two: the old values are the 距星 of their

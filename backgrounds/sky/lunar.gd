@@ -1,4 +1,4 @@
-## The Chinese lunar calendar the HUD's date line is written in (计划 §6.5 S7): the
+## The Chinese lunar calendar the HUD's date line is written in (README「HUD 罗盘规格（自内向外）」): the
 ## 农历 month and day, with the year counted in 道历 (黄帝纪年 = 农历年 + 2697).
 ##
 ## Nothing here is a table of published dates: a lunar month begins at the 朔 (the

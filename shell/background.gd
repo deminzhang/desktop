@@ -58,19 +58,6 @@ func hud_size() -> Vector2i:
 	return Vector2i(320, 200)
 
 
-## Where the shell's own switches stand in this background's HUD, or null for a HUD
-## that leaves them to the shell's 菜单 (2026-10-12 第二十一轮: 用户把菜单里的 `桌面`
-## 显隐开关搬到罗盘左下角,与 星座/星宿 排成一列). The background owns the **seat** - it
-## is a Control in its own layout, at its own size - and the shell owns the chip it puts
-## in it and what that chip does, so the shell never learns what a background looks like
-## and a background never learns what the desktop switch means.
-##
-## A background whose seat is not null loses the shell's own 桌面 row: one switch in one
-## place, and the shell asks for the row by drawing the chip.
-func hud_shell_slot() -> Control:
-	return null
-
-
 func render_policy() -> int:
 	return Policy.CONTINUOUS
 

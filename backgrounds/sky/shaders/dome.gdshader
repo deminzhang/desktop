@@ -5,7 +5,7 @@
 // Painted on real geometry rather than left to a procedural skybox, because a
 // scene whose only content is an Environment background does not present into
 // the wallpaper window once the host has reparented it into the desktop's
-// WorkerW layer (计划 §2.2 V3). The sphere also gives the star field a horizon
+// WorkerW layer (README V3). The sphere also gives the star field a horizon
 // and the compass something to hang the horizon ring on.
 //
 // The horizon comes from the world, not from this mesh's own frame: the sphere

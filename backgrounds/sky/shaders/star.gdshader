@@ -3,7 +3,7 @@
 // Not billboarded in the shader: every quad is already perpendicular to its own
 // direction, and the camera never leaves the centre of the sphere, so the whole
 // field is static geometry on SkyRoot - which is exactly what lets the sky idle
-// between frames (计划 §7).
+// between frames (README「性能与静默」).
 //
 // Per star: COLOR is the star's colour times its magnitude brightness, UV is the
 // quad corner for the disc falloff, UV2 carries (twinkle phase, twinkle amount).

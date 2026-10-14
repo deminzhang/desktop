@@ -1,11 +1,12 @@
-## The Chinese calendar the sky is read in (计划 §6.5 S7): the four pillars
+## The Chinese calendar the sky is read in (README「HUD 罗盘规格（自内向外）」): the four pillars
 ## (年/月/日/时 干支), the solar term in force, the 三元九运 the year sits in and
 ## the 旬 the day sits in - the inputs every 术数 chart is cast from, handed to
 ## `QiMen.pan()` and `LiuRen.pan()` as one dictionary.
 ##
 ## The terms come out of astro.gd's own Sun: a term begins the instant the apparent
-## solar longitude crosses a 15 deg step, the same definition S6's marks and A10 /
-## A17 are held to, so no third-party almanac is needed (the reference project
+## solar longitude crosses a 15 deg step, the same definition the ecliptic and 宿
+## marks and the equinox and solstice readings README「验证」 lists are held to, so
+## no third-party almanac is needed (the reference project
 ## leans on the lunar-calendar plugin for this). Everything else counts off that
 ## and off the day cycle: the year turns at 立春, the month at each 节, the day on
 ## the 60-cycle of the Julian day number, the hour by 五鼠遁 from the day stem.
@@ -105,8 +106,9 @@ static func term_index(jd_ut: float) -> int:
 
 
 ## The instant term `index` begins, on the `next` side of `jd_ut`: bisection on
-## astro.gd's own longitude, the way A17 finds the 二分二至. The Sun moves about a
-## degree a day, so the bracket holds that crossing and no other.
+## astro.gd's own longitude, the way the equinox and solstice readings
+## README「验证」 lists are found. The Sun moves about a degree a day, so the
+## bracket holds that crossing and no other.
 static func term_jd(index: int, jd_ut: float, next := false) -> float:
 	var target := fposmod(15.0 * float(index), 360.0)
 	var ahead := fposmod(target - _longitude_at(jd_ut), 360.0)
@@ -122,7 +124,7 @@ static func term_jd(index: int, jd_ut: float, next := false) -> float:
 
 
 ## The Sun's apparent longitude at a UT instant. astro.gd's own longitude is a
-## function of TT (S4 places the Sun through tt_from_ut), and the terms are TT
+## function of TT (the Sun is placed through tt_from_ut), and the terms are TT
 ## instants like any other ephemeris event - leaving ΔT out would put every 节气
 ## about a minute early, which is a minute at the edge of a 局数 boundary.
 static func _longitude_at(jd_ut: float) -> float:

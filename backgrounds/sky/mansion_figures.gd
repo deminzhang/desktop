@@ -12,7 +12,7 @@
 ## The stars are named the way 伊世同《中西对照恒星图表》(1981) names them - Bayer letter
 ## or Flamsteed number, with the constellation, and the star names are the ones its tables
 ## use (角宿一 = α Vir, 库楼二 = η Cen …) - resolved against the catalogue's own
-## designations, like every other line on this sky (计划 §6.3: no coordinate table enters
+## designations, like every other line on this sky (README「数据源与许可」: no coordinate table enters
 ## the repo). BSC5 names a star by no Bayer letter and no Flamsteed number sometimes (the
 ## Latin-lettered ones such as g Cen, and a few dozen of the 星官's fainter stars): those
 ## are written "HR 5192" and resolved with StarCat.find_hr(), because the HR number is the
@@ -30,11 +30,15 @@
 ## asterisks: 大角, 招摇, 北落师门 …) are here from the reference alone, their articles
 ## carrying no table.
 ##
-## What is missing is missing for one reason: BSC5 stops at V ≈ 6.5, and 48 of the
-## classical stars are fainter (羽林军 45 星 → 38 in the catalogue, 天垒城 13 → 9 …). A
-## star the catalogue does not have is dropped and the chain it stood in is split there -
-## never bridged, because a line between the stars that did resolve is a chord the sky
-## never had. The 星名 counts in the comments above each 宿 are what is drawn.
+## What is missing is missing for one reason: BSC5 stops at V ≈ 6.5, so the fainter
+## stars of the source tables have no row to be written as (data/SOURCES.md counts the
+## source side: 218 星官 1070 星 read, 50 rows landing nowhere). A star the catalogue does
+## not have was dropped when this table was written, and the chain it stood in is split
+## there - never bridged, because a line between the stars that did resolve is a chord the
+## sky never had. Measured 2026-10-15 (a probe over every entry): every designation this
+## table does carry resolves - 209 星官, 947 designation rows, 873 distinct stars - so the
+## 星名 counts in the comments above each 宿 are the whole of what is drawn, and the
+## missing stars are missing as *names*, not as failed lookups.
 class_name MansionFigures
 extends RefCounted
 

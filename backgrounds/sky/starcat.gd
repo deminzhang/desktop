@@ -6,8 +6,8 @@
 ## and B-V colour.
 ##
 ## Positions are kept in degrees; direction() is the single place that turns
-## them into a vector on the celestial sphere, so every stage (star field, S2
-## constellation lines, S3 alt/az) shares one convention.
+## them into a vector on the celestial sphere, so every stage (the star field, the
+## constellation figures and their names, the clockwork's alt/az) shares one convention.
 class_name StarCat
 extends RefCounted
 

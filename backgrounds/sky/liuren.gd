@@ -1,4 +1,4 @@
-## The 大六壬 chart's sky plate, cast for the dial (计划 §6.5 S7): the 月将 the
+## The 大六壬 chart's sky plate, cast for the dial (README「HUD 罗盘规格（自内向外）」): the 月将 the
 ## solar term in force puts on the board, the heaven plate 月将加时 turns over the
 ## twelve earth branches, the 旬遁 stems the day's 旬 pairs with those heaven
 ## branches, and the 十二天将 the day stem's 贵神 leads round it.

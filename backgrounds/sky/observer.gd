@@ -1,8 +1,8 @@
-## Where the sky is watched from (计划 §9).
+## Where the sky is watched from (README「背景二：星野（3D 星空）」).
 ##
 ## Latitude and east longitude alone fix the horizon; the UTC offset is only for
 ## reading the clock back in the observer's local time, which the HUD's time bar
-## (S7) does. Beijing until something can change it.
+## does. Beijing until something can change it.
 class_name Observer
 extends RefCounted
 

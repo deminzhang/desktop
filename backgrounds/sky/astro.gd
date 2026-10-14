@@ -1,6 +1,6 @@
 ## The clockwork under the star sphere: calendar to Julian date, sidereal time,
 ## and the one rotation that carries the catalogue's J2000 coordinates into the
-## observer's horizon (计划 §6.2).
+## observer's horizon (README「天文算法（全部本地计算，无网络）」).
 ##
 ## Two frames meet here, and nowhere else:
 ##   * the catalogue frame, which StarCat.direction() defines (+X = RA 0h,
@@ -12,14 +12,14 @@
 ## sky to any date and place is one basis assignment.
 ##
 ## Azimuth runs from north towards east, the reading the compass HUD's view arc
-## (S7) is drawn from. Everything here is local arithmetic: no ephemeris, no network.
+## is drawn from. Everything here is local arithmetic: no ephemeris, no network.
 ##
 ## Precision: only the scalars are double. Vector3, Basis and Vector2 are single
 ## precision in Godot, so any position that passes through one carries of order
 ## 1e-5 deg of rounding - 0.04 arcsec, three orders of magnitude inside the
-## arcminute targets S4-S6 are held to (计划 §8). That floor is where the probe's
-## tolerances come from, and it is why the exact laws are stated to 1e-6 deg
-## rather than to machine epsilon.
+## arcminute targets the Sun, the Moon, the planets and the ecliptic are held to
+## (README「验证」). That floor is where the probe's tolerances come from, and it is
+## why the exact laws are stated to 1e-6 deg rather than to machine epsilon.
 class_name Astro
 extends RefCounted
 
@@ -64,7 +64,7 @@ static func unix_from_julian_day(jd: float) -> float:
 ## remainder is (TimeCore's own stepper, `SkyTimeBar._step`).
 const SIDEREAL_DAY := 86164.0905
 
-## Greenwich mean sidereal time in degrees (计划 §6.2). U.T. in, 0.1 s of arc of
+## Greenwich mean sidereal time in degrees (README「天文算法（全部本地计算，无网络）」). U.T. in, 0.1 s of arc of
 ## the polynomial's own accuracy - it reproduces Meeus' worked example 12.a to
 ## 2e-5 s (.tmp/tests/sky_probe.gd).
 static func gmst_deg(jd: float) -> float:
@@ -147,7 +147,7 @@ static func azimuth_of(direction: Vector3) -> float:
 
 
 ## Altitude and azimuth of an equatorial position, straight from the spherical
-## trigonometry (计划 §6.2) rather than through sky_basis(). Returns
+## trigonometry (README「天文算法（全部本地计算，无网络）」) rather than through sky_basis(). Returns
 ## Vector2(altitude, azimuth); the two paths agreeing is what .tmp/tests/sky_probe.gd
 ## checks. `ra_deg`/`dec_deg` must be for the same equinox as `sidereal_deg`,
 ## which is local sidereal time in degrees (lst_deg() above).

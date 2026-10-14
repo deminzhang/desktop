@@ -1,4 +1,4 @@
-## The Moon: a sphere the Sun lights, so its phase is real geometry (计划 §6.5 S4),
+## The Moon: a sphere the Sun lights, so its phase is real geometry (README「背景二：星野（3D 星空）」),
 ## and the orbit it runs - drawn out of scale, at the user's request (2026-10-10).
 ##
 ## The disc is a unit sphere scaled to the apparent radius the ephemeris gives,

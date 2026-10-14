@@ -6,7 +6,7 @@
 ## stars the catalogue carries instead of a second coordinate table, and they
 ## turn with SkyRoot like everything else on the sphere.
 ##
-## The figures are the traditional asterisms (计划 §6.3 keeps third-party line
+## The figures are the traditional asterisms (README「数据源与许可」 keeps third-party line
 ## data out of the repo: no coordinate list is copied, the shapes are written
 ## here as designation pairs). A star a figure needs but the catalogue files
 ## under a neighbour - the Argo pieces, Serpens Cauda, Auriga's base - is
