@@ -45,7 +45,18 @@ const TURN_SNAP := 0.02
 ## point a point and a hairline a hairline at any zoom.
 const BASE_FOV := 60.0
 const FOV_MIN := 12.0
-const FOV_MAX := 110.0
+## The widest field the rig will hold: 179, which is the engine's own ceiling
+## (`Camera3D.fov` refuses anything past it), so a caller asking for 180 gets the
+## widest there is instead of a rejected set that leaves the camera where it was.
+##
+## What a field that wide is *for*: the maps that put the angle itself on the frame
+## (`pan`, `cylinder`, `sphere`) hold it without trouble, and 用户 asked for it
+## (2026-10-12: "fov改180") to get the horizon's whole southern half on the frame at
+## once. The camera's own lens is past the useful part of its range long before this -
+## it diverges at 180, and at 179 it crams everything within ~45 deg of the axis into
+## a few pixels in the middle (measured) - so the opening stays OPENING_FOV, and the
+## ceiling is a capability rather than a composition.
+const FOV_MAX := 179.0
 const ALTITUDE_MIN := 0.0
 const ALTITUDE_MAX := 90.0
 
@@ -56,19 +67,65 @@ const CARDINALS := {
 	"west": 270.0,
 }
 
-## The opening view is the whole sky at once (S7): the frame's top edge is past
-## the zenith and its bottom edge past the horizon, so turning in azimuth alone -
-## the HUD's 左转/右转 - walks every star above the horizon past the observer and
-## no star is ever left over the top of the frame. Ninety degrees of field would
-## be the least that does it (a camera at 45 deg sees exactly zenith-to-horizon,
-## with star quads rolling off both edges); the field is a little wider so the
-## zenith itself sits inside the frame and S4's sliver of ground stays at the
-## bottom.
+## The opening view is a *directed* one: due south, 42.5 deg up, 96 deg of field - a
+## window onto the southern sky with the observer's own horizon across its bottom, not
+## the whole sky at once (用户 2026-10-14: "我要的是要从整体中截取东西南北天的部分显示,
+## 不是一直仰头正能天顶"). Turning in azimuth then walks the whole sky past that window -
+## 171 deg of bearing across the frame, so 东/南/西/北 each get their own picture.
 ##
-## What the sky sends to the wallpaper is a camera looking up, not a sky with a
-## low horizon - the horizon itself is where the observer's own is.
-const OPENING_ALTITUDE := 45.0
-const OPENING_FOV := 100.0
+## The two numbers are tied to each other: altitude + half the field = 90.5, i.e. the
+## frame's own top edge stands half a degree *past* the observer's zenith, so the zenith's
+## own point lands 7.5 px inside it (用户 2026-10-14: "能不能压一下让他在屏顶露个头").
+## That is deliberately not "on the edge": a one-pixel line exactly on row 0 is lost by the
+## rasteriser (measured - at the 92 deg framing the cross's own bar fell a row outside the
+## frame and only its lower arm was drawn), so the point is given a row of its own, and what
+## shows is the hollow cross's bar, its whole lower arm, and the first dash of the upper arm
+## with the rest of it cut by the frame (SkyLabels::_draw_zenith). Until this round the
+## framing was 35/80, which put the point 270 px above the top edge - the turn's arcs curled
+## about a point off the picture, and the sky's own mark for it was never drawn at all.
+##
+## The horizon is the frame's *other* end, and it answers to the desktop rather than to the
+## sky: the wallpaper window is the whole screen, the taskbar is drawn over its bottom
+## TASKBAR px, and one 字 of the 地支 ring - which stands SkyBranches.GAP below the horizon
+## - has to stay visible above that bar (用户 2026-10-14: "桌面任务栏以上,地平线以下要露一
+## 个字的高度"). The two requirements are the same knob apart: the horizon's own row is
+## `(0.5 + altitude / fov) * FRAME.y`, which the zenith's half degree turns into
+## `90.5 * FRAME.y / fov`, so the field alone decides where the ground ends - 93 deg puts it
+## 9 px *under* the bar (which is what 用户 saw: the 地支 mark at the middle of the frame
+## hidden), 95 puts it 20 px over, and the pair taken here clears the mark's own box. See
+## backgrounds/sky/projection_probe.gd, which asserts both ends of the frame and prints the
+## pixels either side of the bar.
+##
+## What the field costs is measured rather than chosen (`--sky-fov`/`--sky-view` in
+## README「投影」): the horizon's own arc deepens 272 -> 414 px and the sky is drawn 15.00 px
+## per degree instead of 18.00, while the share of the frame the ground takes is 16 per cent
+## against the 13.77 the narrower window left. Every other way of getting the zenith onto
+## the frame costs more: a narrower field takes the horizon itself off the bottom (72 deg of
+## field puts the ground at 0.2 per cent of the frame).
+##
+## Under the fisheye the view axis is the map's own pole, so this framing is what makes
+## the sky's two motions read on screen: a turn swings the picture about the zenith's
+## point - which sits at the top edge here, its cross showing there - and the day wheels it
+## about the pole. The horizon is the one line the fisheye bends (it is not through the
+## pole): at this field it comes out as the arc 414 px deep that 用户 2026-10-14 asked about
+## ("地平线是弯的,能不能拉成直的"); the whole of that argument, with the numbers of every
+## way out of it, is in backgrounds/sky/projection_probe.gd and README「投影」.
+const OPENING_ALTITUDE := 42.5
+## The bottom of the frame the desktop does not show: the taskbar. Read off the usable area
+## on this machine - 0,0,2560x1392 of the 0,0,2560x1440 frame (计划 A45) - and only ever
+## used to say what the ground under the horizon has to clear (the probe asserts it against
+## the wallpaper's own 1440; nothing in the projection reads it).
+const TASKBAR := 48.0
+## 96 deg: the southern sky from the zenith itself down to 5.5 deg of ground, 171 deg of
+## bearing across a 16:9 frame, and 15.00 px per degree wherever you look (the map's own
+## `half the frame's height over half the field`). Wide enough that the frame holds the sky
+## the eye reads a landscape by, that the zenith rides its own top edge and that the ground
+## clears the taskbar by a whole 地支 box at the middle of the frame (34.5 px of ground
+## there against the 21 the mark needs); narrow enough that turning 90 deg is a *different*
+## sky rather than a shift of the same one, and that the map's own stretch stays within
+## 1.57x over the sky it draws (rho/sin(rho) at the horizon's ring; the frame's own corners
+## reach 1.72, 97.9 deg off the axis).
+const OPENING_FOV := 96.0
 var azimuth := 180.0
 var altitude := OPENING_ALTITUDE
 var fov := OPENING_FOV
@@ -91,8 +148,8 @@ var _dragging := false
 
 
 ## Takes the camera and applies the opening view: the field defaults above are
-## where the wallpaper starts looking - due south, a little above the horizon,
-## 60 degrees wide.
+## where the wallpaper starts looking - due south, 44 degrees up, 92 wide, the
+## zenith on the frame's top edge.
 func setup(camera_3d: Camera3D) -> void:
 	camera = camera_3d
 	# The opening view is the aim too: nothing is in flight and nothing is

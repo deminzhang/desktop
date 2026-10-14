@@ -13,6 +13,13 @@ shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled,
 		fog_disabled;
 
+// where a vertex of the sky goes on the frame, in place of the camera's own
+// rectilinear lens (the reasoning is in the include). This quad is the one whose
+// size was the complaint: through the lens its disc grew fivefold as it drifted out
+// to the side of the frame, and through this map it keeps the size and the shape it
+// has in the middle for as far as it crosses it.
+#include "res://backgrounds/sky/shaders/sky_projection.gdshaderinc"
+
 // hdr: the core is meant to sit over the glow threshold, the halo well under it
 uniform float core = 0.067;
 uniform float core_brightness = 9.0;
@@ -26,6 +33,7 @@ varying vec3 world_position;
 
 void vertex() {
 	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	POSITION = SKY_CLIP(VIEW_MATRIX * MODEL_MATRIX * vec4(VERTEX, 1.0));
 }
 
 void fragment() {

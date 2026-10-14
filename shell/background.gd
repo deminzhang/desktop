@@ -58,21 +58,17 @@ func hud_size() -> Vector2i:
 	return Vector2i(320, 200)
 
 
-## The switches this background offers in the HUD's 菜单 panel, one row each and
-## in this order: {"id": String, "label": String, "on": bool}. The menu is the
-## shell's chrome, so a background that has a switch of its own hands it over
-## here instead of drawing a control in its own HUD - the shell rebuilds the rows
-## on every switch, and the empty default is a menu with nothing but its own
-## rows. Only the sky has one so far (the constellation figures and names).
-func menu_switches() -> Array:
-	return []
-
-
-## One of menu_switches() has been clicked: `on` is the state it was switched to.
-## The menu draws the label; the state is the background's, so it does not
-## survive a rebuild (the same rule as the HUD content itself).
-func set_menu_switch(_id: String, _on: bool) -> void:
-	pass
+## Where the shell's own switches stand in this background's HUD, or null for a HUD
+## that leaves them to the shell's 菜单 (2026-10-12 第二十一轮: 用户把菜单里的 `桌面`
+## 显隐开关搬到罗盘左下角,与 星座/星宿 排成一列). The background owns the **seat** - it
+## is a Control in its own layout, at its own size - and the shell owns the chip it puts
+## in it and what that chip does, so the shell never learns what a background looks like
+## and a background never learns what the desktop switch means.
+##
+## A background whose seat is not null loses the shell's own 桌面 row: one switch in one
+## place, and the shell asks for the row by drawing the chip.
+func hud_shell_slot() -> Control:
+	return null
 
 
 func render_policy() -> int:

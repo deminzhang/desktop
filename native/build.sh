@@ -26,6 +26,21 @@ if [ -z "$GCC_BIN" ]; then
   exit 1
 fi
 
-"$GCC_BIN" -O2 -s -Wall -Wextra -mwindows -o ../bin/host.exe host.c \
+# windres, for the tray icon resource (native/tray.rc + xuandesk.ico): it ships
+# beside gcc, so look there first and fall back to PATH. It cds with the script,
+# which is also what makes the .rc's relative icon path resolve.
+GCC_DIR="$(dirname "$GCC_BIN")"
+WINDRES_BIN=""
+for c in "$GCC_DIR/windres" "$GCC_DIR/windres.exe" windres; do
+  if [ -x "$c" ] || command -v "$c" >/dev/null 2>&1; then WINDRES_BIN="$c"; break; fi
+done
+if [ -z "$WINDRES_BIN" ]; then
+  echo "no windres found; it ships with mingw-w64 (set PATH or install it)" >&2
+  exit 1
+fi
+
+"$WINDRES_BIN" tray.rc -O coff -o tray_res.o
+"$GCC_BIN" -O2 -s -Wall -Wextra -mwindows -o ../bin/host.exe host.c tray_res.o \
     -lws2_32 -liphlpapi -luser32 -ladvapi32 -lshell32
+rm -f tray_res.o
 echo "built bin/host.exe with $GCC_BIN"

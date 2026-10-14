@@ -9,6 +9,12 @@
 shader_type spatial;
 render_mode unshaded, cull_back, shadows_disabled, fog_disabled;
 
+// where a vertex of the sky goes on the frame, in place of the camera's own
+// rectilinear lens (the reasoning is in the include). The disc is a sphere of its
+// own and is mapped by direction like everything else: its phase is geometry in
+// this shader and does not care where the map puts it.
+#include "res://backgrounds/sky/shaders/sky_projection.gdshaderinc"
+
 uniform vec3 sun_dir = vec3(0.0, -1.0, 0.0);
 uniform vec3 lit_colour : source_color = vec3(0.780, 0.760, 0.720);
 uniform vec3 dark_colour : source_color = vec3(0.050, 0.050, 0.055);
@@ -43,6 +49,7 @@ void vertex() {
 	surface_point = normalize(VERTEX);
 	sunward = dot(surface_point, sun_dir);
 	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	POSITION = SKY_CLIP(VIEW_MATRIX * MODEL_MATRIX * vec4(VERTEX, 1.0));
 }
 
 void fragment() {

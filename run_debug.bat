@@ -2,7 +2,7 @@
 rem Same as run.bat but keeps the console attached so host.exe's output and the
 rem engine's are visible. The engine build is a GUI-subsystem binary, so its own
 rem stdout only reaches the file it is redirected to - use
-rem   run_debug.bat --shot=shots/x.png > tools\run.log 2>&1
+rem   run_debug.bat --shot=.tmp/shots/x.png > .tmp\tools\run.log 2>&1
 rem when the engine's own lines matter.
 setlocal
 cd /d "%~dp0"

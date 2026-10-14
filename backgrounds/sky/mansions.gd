@@ -101,8 +101,3 @@ func of_ra(ra_deg: float) -> Dictionary:
 ## on the equator the divisions are measured along.
 func centre_direction(index: int) -> Vector3:
 	return StarCat.direction(centre_ra(index), 0.0)
-
-
-## The unit direction of 宿 `index`'s opening, where its tick is drawn.
-func opening_direction(index: int) -> Vector3:
-	return StarCat.direction(boundary_ra[index], 0.0)

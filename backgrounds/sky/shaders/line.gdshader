@@ -7,6 +7,10 @@
 shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
 
+// where a vertex of the sky goes on the frame, in place of the camera's own
+// rectilinear lens (the reasoning is in the include)
+#include "res://backgrounds/sky/shaders/sky_projection.gdshaderinc"
+
 uniform float horizon_fade = 0.035;
 // how much of the night is left: 1 at night, 0 with the Sun up (set by sky.gd)
 uniform float night = 1.0;
@@ -24,6 +28,7 @@ void vertex() {
 	// point to grow the width from is the radius along its own direction
 	vec3 base = normalize(VERTEX) * sphere_radius;
 	VERTEX = base + (VERTEX - base) * size_scale;
+	POSITION = SKY_CLIP(VIEW_MATRIX * MODEL_MATRIX * vec4(VERTEX, 1.0));
 	line_colour = COLOR.rgb;
 	altitude = normalize((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz).y;
 }

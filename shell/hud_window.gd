@@ -1,57 +1,49 @@
 ## The floating monitor window: a borderless, always-on-top, per-pixel
 ## transparent OS window.
 ##
-## The shell's chrome - the 菜单 button and the panel it opens - is a window of its
-## own (`HudMenu`, built and owned by the shell), glued to this window's top-right
-## corner. It has to be a window of its own: 穿透 passes every mouse event through
-## this window (`Window.mouse_passthrough`), and a window that has passed the mouse
-## through has passed it through everywhere, so a corner of this one could not stay
-## live. The menu window is never passed through, which is what makes the way out of
-## 穿透 clickable (计划 §6.4).
+## Nothing is glued to it any more: the shell's chrome - the 菜单 - lives in the
+## notification area since 2026-10-13 (the tray icon and Win32 popup bin/host.exe
+## owns, see the tray block in native/host.c). That is also what keeps 穿透
+## escapable: 穿透 passes every mouse event through this window, and a window that
+## has passed the mouse through has passed it through everywhere, so nothing drawn
+## *in* it stays clickable - while a tray icon is not a window of ours at all.
 ##
-## It has to be the *shell's* window rather than this window's child, too: a Window
-## node nested inside another Window draws its first frame and then never draws again
-## (计划 §2.3 G30), and this one's whole point is that it changes under the pointer.
+## 穿透 itself is not done with Godot's `Window.mouse_passthrough` (2026-10-13):
+## on Windows that flag only makes the window answer WM_NCHITTEST with
+## HTTRANSPARENT, which the system forwards to underlying windows *in the same
+## thread* - so the HUD stopped taking clicks but nothing underneath got them
+## either (measured; see native/host.c apply_one_overlay). The window style
+## Windows honours across processes is the host's business, like its topmost /
+## tool-window / no-activate bits: this class owns the flag and says when it
+## turned over.
 ##
-## Everything above that is whatever the current background built. Switching a
+## Everything in here is whatever the current background built. Switching a
 ## background replaces the content and resizes this window to match.
 ##
-## The "desktop" control and the rest of the chrome belong to the menu window the
-## shell owns (`HudMenu`): this window is only what a background draws in, plus the
-## corner the menu is glued to.
-##
 ## Dragging is done by hand (mouse offset -> window position) rather than with a
-## native caption drag, so it keeps working while the window is non-activating - and
-## the menu window is re-glued to the corner on every frame, because a native window
-## does not follow another one by itself.
+## native caption drag, so it keeps working while the window is non-activating.
 class_name HudWindow
 extends Window
 
 ## The host's own quit hotkey lands on this window (Ctrl+Alt+Q, `_on_host_event`).
-## It is the shell that exits, so this is a request, like the menu's 退出.
+## It is the shell that exits, so this is a request, like the tray's 退出 row.
 signal quit_requested
+## 穿透 has turned over - through Ctrl+Alt+T or the tray's 穿透 row. This window
+## owns the flag (the mouse passthrough is its own), the tray is the shell's, and
+## the two are kept in step through this (2026-10-13).
+signal passthrough_changed(locked: bool)
 
+## The gap the window is seeded at: `MARGIN` from the usable area's right edge,
+## `TOP_MARGIN` from its top (用户 2026-10-14: the HUD's default distance from the
+## screen top is 100). Only the first placement uses them - thereafter the window
+## stays where the user dragged it (`_placed`).
 const MARGIN := 26
+const TOP_MARGIN := 100
 const SEED_SIZE := Vector2i(320, 200)
-## Where the menu's 菜单 button sits inside this window's content: `MENU_MARGIN` from
-## the right edge, `MENU_TOP` from the top. The menu window grows left and down from
-## that corner when its panel opens, so the corner itself never moves.
-##
-## It hangs *above* the content (a negative top) since 2026-10-10 第十八轮: the sky's
-## compass card now keeps its 左转/右转 chips in its own two upper corners - the old
-## 268..292 corner pair moved up to 8..32 - and a 菜单 button inside the top-right one
-## covered the ↘ chip's glyph and took its clicks (the menu is a window above this
-## one, so nothing of the chip was left). Floating it 28 px higher keeps it in the
-## corner the user knows, clear of the card. The window is its own, so this only
-## moves where it is; a background that puts a control in the bottom-left of its HUD
-## would want the same treatment.
-const MENU_MARGIN := 11.0
-const MENU_TOP := -28.0
 
 var metrics: MetricsClient
 
 var _content: Control
-var _menu: HudMenu
 var _placed := false
 var _dragging := false
 var _drag_offset := Vector2i.ZERO
@@ -70,25 +62,9 @@ func _ready() -> void:
 	set_process_input(true)
 
 
-func _process(_delta: float) -> void:
-	_glue_menu()
-
-
-## The shell's menu window, glued to this window's corner from here on. Null is a
-## HUD without chrome, which is what the probe builds.
-func set_menu(menu: HudMenu) -> void:
-	_menu = menu
-	_menu.set_locked(_locked)
-	_glue_menu()
-
-
-## The menu window, for the shell's shot target and the probes.
-func menu_window() -> HudMenu:
-	return _menu
-
-
-## The 穿透 switch, driven from the menu's own row - the shell is not in the way of
-## it, so the menu does not need a signal of its own for it.
+## The 穿透 switch, driven from the tray's own row (the shell routes the event
+## back here) and from Ctrl+Alt+T. This window is not in the way of it, so the
+## signal it carries is for whoever else keeps the state - the tray's tick.
 func toggle_passthrough() -> void:
 	_toggle_lock()
 
@@ -109,13 +85,6 @@ func set_content(content: Control, content_size: Vector2i) -> void:
 	if not _placed:
 		_placed = true
 		position = _default_position()
-	_glue_menu()
-
-
-## Points the menu at the live background without emitting background_selected.
-func set_current(id: String) -> void:
-	if _menu != null:
-		_menu.set_current(id)
 
 
 func attach(client: MetricsClient) -> void:
@@ -126,49 +95,36 @@ func attach(client: MetricsClient) -> void:
 # --------------------------------------------------------------------- window
 
 func _fit(content_size: Vector2i) -> void:
-	# this window is the content, edge to edge: the shell's chrome lives in the menu
-	# window above it, so there is no strip to add here any more
+	# this window is the content, edge to edge: the chrome is the tray's now, so
+	# there is no strip to add here
 	_content_size = content_size
 	size = content_size
-
-
-## How many screen pixels one of this window's own pixels is: the HUD is a fixed
-## pixel size on a fixed-scale display, but the OS is the one that decides.
-func _pixel_scale() -> float:
-	var physical := Vector2(DisplayServer.window_get_size(get_window_id()))
-	if size.x <= 0 or size.y <= 0:
-		return 1.0
-	var scale := physical.x / float(size.x)
-	return scale if scale > 0.0 else 1.0
-
-
-## Puts the menu window's 菜单 button on this window's top-right corner: the menu
-## grows left and downwards from there, so what is glued is the button, not the
-## window - `HudMenu.button_origin()` is where the button sits inside it.
-func _glue_menu() -> void:
-	if _menu == null or not is_instance_valid(_menu):
-		return
-	var scale := _pixel_scale()
-	var corner := Vector2(float(_content_size.x) - MENU_MARGIN - HudMenu.BUTTON.x, MENU_TOP)
-	_menu.place_at(position + Vector2i((corner * scale).round()))
 
 
 func _default_position() -> Vector2i:
 	var screen := DisplayServer.get_primary_screen()
 	var usable := DisplayServer.screen_get_usable_rect(screen)
 	return Vector2i(usable.position.x + usable.size.x - size.x - MARGIN,
-			usable.position.y + MARGIN)
+			usable.position.y + TOP_MARGIN)
 
 
 ## The one switch that is about the mouse rather than about the sky: with it on,
-## every event this window sees is passed to the desktop under it - and the menu
-## window, which is not passed through, is the only part of the HUD left clickable.
+## every event this window sees is passed to the desktop under it. The tray icon is
+## what stays clickable when it is on (2026-10-13) - before that it was the menu
+## window sitting on this one's corner.
+##
+## The window style that does the passing is the host's to set (it owns this
+## window's styles and holds the same flag): this only turns the flag over and
+## says so, which is what main.gd sends to the host and what the tray's row shows.
 func _toggle_lock() -> void:
 	_locked = not _locked
-	mouse_passthrough = _locked
-	if _menu != null:
-		_menu.set_locked(_locked)
+	passthrough_changed.emit(_locked)
 	print("XuanDesk: HUD mouse passthrough %s" % ("on" if _locked else "off"))
+
+
+## Whether the mouse is being passed through - what the tray's 穿透 row ticks.
+func is_locked() -> bool:
+	return _locked
 
 
 func _on_host_event(name: String) -> void:
@@ -186,10 +142,6 @@ func _on_host_event(name: String) -> void:
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
-			# a press on the HUD itself shuts the menu's panel: the panel is a window
-			# of its own and never sees this one's events
-			if _menu != null:
-				_menu.close_panel()
 			if _over_content_control(event.position):
 				return
 			_dragging = true

@@ -14,8 +14,16 @@ if errorlevel 1 (
 )
 
 if not exist "..\bin" mkdir "..\bin"
-gcc -O2 -s -Wall -Wextra -mwindows -o ..\bin\host.exe host.c ^
-    -lws2_32 -liphlpapi -luser32 -ladvapi32 -lshell32
+rem The tray icon is a compiled-in resource (tray.rc + xuandesk.ico), so windres
+rem runs first; it sits beside gcc.
+windres tray.rc -O coff -o tray_res.o
 if errorlevel 1 exit /b 1
+gcc -O2 -s -Wall -Wextra -mwindows -o ..\bin\host.exe host.c tray_res.o ^
+    -lws2_32 -liphlpapi -luser32 -ladvapi32 -lshell32
+if errorlevel 1 (
+    del tray_res.o
+    exit /b 1
+)
+del tray_res.o
 echo [XuanDesk] built bin\host.exe
 endlocal

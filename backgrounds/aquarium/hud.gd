@@ -8,9 +8,11 @@ const PANEL := Vector2(280.0, 280.0)
 const ROW_X := 14.0
 ## The value column's right edge, 14 px inside the card.
 const ROW_RIGHT := 266.0
-## The table starts below the 菜单 button the shell glues to this card's top-right
-## corner - `HudWindow.MENU_TOP + HudMenu.BUTTON.y` = 24 - because 处理器's value is
-## the top row of the right-aligned value column and used to be drawn under it.
+## The table's top margin. It is 28 rather than ROW_X's 14 because the shell's 菜单
+## button used to hang over this card's top-right corner (the 处理器 value is the top
+## row of the right-aligned value column and was drawn under it). The button went to
+## the notification area 2026-10-13, and the table keeps the margin it was laid out
+## with - moving it up would re-cut every row below for no reason.
 const ROW_TOP := 28.0
 const ROW_PITCH := 27.0
 const GRAPH := Rect2(14.0, 212.0, 252.0, 54.0)
@@ -40,11 +42,13 @@ func _ready() -> void:
 	size = PANEL
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_bg = StyleBoxFlat.new()
-	_bg.bg_color = Color(0.016, 0.043, 0.058, 0.68)
+	# 用户 2026-10-13: "HUD背景太黑了,透一点" - the same softening the sky card's plate
+	# got (0.72 -> 0.55 there), so the two backgrounds' HUDs still look like one family.
+	_bg.bg_color = Color(0.016, 0.043, 0.058, 0.55)
 	_bg.set_corner_radius_all(16)
 	_bg.set_border_width_all(1)
 	_bg.border_color = C_BORDER
-	_bg.shadow_color = Color(0.0, 0.0, 0.0, 0.45)
+	_bg.shadow_color = Color(0.0, 0.0, 0.0, 0.25)
 	_bg.shadow_size = 12
 	_hist["cpu"] = PackedFloat32Array()
 	_hist["gpu"] = PackedFloat32Array()

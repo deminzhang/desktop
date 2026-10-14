@@ -21,7 +21,7 @@
 ## the last month or so, drawn faint, which is where a retrograde loop shows itself.
 ##
 ## Everything down to `state()` is static and takes its instant as an argument, so
-## the whole ephemeris is reachable headless (tests/).
+## the whole ephemeris is reachable headless (the probes under .tmp/tests/).
 class_name SkyPlanets
 extends Node3D
 
@@ -32,6 +32,12 @@ const DRAWABLE := [
 	["水星", 0], ["金星", 1], ["火星", 3], ["木星", 4], ["土星", 5],
 	["天王星", 6], ["海王星", 7],
 ]
+
+## The 五行星 by the names DRAWABLE writes them under: the five the HUD's dial marks
+## (2026-10-14, 用户: "日月金木水火土星保留...五行星用五行色点"). The other two are
+## drawn on the sky's own layer - they have no 五行 to be coloured by, which is why
+## they take the palette's cool inks (COLOURS) - and the card is read as 日+月+五星.
+const FIVE_STARS := ["水星", "金星", "火星", "木星", "土星"]
 
 ## JPL's approximate elements, per row (Standish & Williams, "Approximate Positions
 ## of the Planets", Table 1): semi-major axis (AU), eccentricity, inclination, mean
@@ -337,6 +343,10 @@ func _init() -> void:
 		mesh.orientation = PlaneMesh.FACE_Z
 		mesh.size = Vector2.ONE * MARK_MAX
 		mark.mesh = mesh
+		# the sky's own map puts a mark wherever its direction lands, which reaches
+		# outside the camera's frustum: bounds that hold the camera keep it on the
+		# wallpaper at any bearing (SkyProjection)
+		SkyProjection.keep_visible(mark)
 		var material := ShaderMaterial.new()
 		material.shader = load(SHADER)
 		material.set_shader_parameter("core", CORE)
@@ -430,3 +440,4 @@ func _apply_trail() -> void:
 		return
 	_trail.material_override.set_shader_parameter("night", _night)
 	_trail.material_override.set_shader_parameter("size_scale", _zoom)
+

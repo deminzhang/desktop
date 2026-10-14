@@ -12,9 +12,20 @@
 // turns with the sky (SkyRoot), so what is up for the observer is a direction in
 // the world - taken from the model matrix per vertex, the way the star shader
 // takes it. The Milky Way keeps using the local position, because it is fixed to
-// the equatorial frame and has to turn with the stars.
+// the equatorial frame and has to turn with the stars. Below the horizon the ground
+// is a translucent film in three latitude layers, and the band - being the sky's own
+// content - is read *through* it; the stars are not, and keep the mask they carry at
+// the horizon (2026-10-14 用户: "地平线下的黑色没挡住银河", then "地平线下的黑调成半透
+// ... 分个三层透度,代表三层纬度,每层变暗1/4", then "三层间改成渐变").
 shader_type spatial;
 render_mode unshaded, cull_front, shadows_disabled, fog_disabled;
+
+// where a vertex of the sky goes on the frame, in place of the camera's own
+// rectilinear lens (the reasoning is in the include). The dome is the layer that
+// has to cover the whole frame, so it is the one that leans on it hardest: the
+// map's frame is wider than the lens', and the sphere behind it has a direction
+// for every pixel of it.
+#include "res://backgrounds/sky/shaders/sky_projection.gdshaderinc"
 
 // night
 uniform vec3 night_zenith : source_color = vec3(0.090, 0.130, 0.260);
@@ -52,6 +63,23 @@ uniform vec3 galactic_centre = vec3(0.0);
 uniform vec3 band_colour : source_color = vec3(0.62, 0.64, 0.72);
 uniform float band_strength = 0.16;
 uniform float band_width = 0.13;  // radians, gaussian sigma in galactic latitude
+// The ground below the horizon, as 用户 asked for it on 2026-10-14: "地平线下的黑调成半透
+// ... 分个三层透度,代表三层纬度,每层变暗1/4". The ground is not a slab but a translucent
+// film in three latitude layers, each `ground_step` more opaque than the one above it, so
+// the sky's own content - its gradient and the Milky Way - carries on underneath and is
+// read *through* it. 6 deg of latitude a layer because that is what the ground the *frame*
+// shows is made of: at the opening 42.5/96 framing (--sky-view=180,42.5 --sky-fov=96) the
+// frame's own ground runs 0..-26.8 deg, deepest at the two bottom corners, so the three
+// layers tile the top 18 deg of it and what is left below - the corners - stays at the
+// third one's opacity, the film's own floor; a view dropped onto the horizon (180,0)
+// reaches the third layer sooner and keeps it (its ground runs to -40).
+uniform float ground_span = 0.10472;   // radians of latitude per layer, 6 deg
+uniform float ground_step = 0.25;      // how much more opaque each one is
+// Where the layers meet (用户 2026-10-14, right after seeing the first cut: "三层间改成
+// 渐变"): a seam is not an edge but a gradient, taken `ground_blend` of latitude either
+// side of it. A quarter of the span is what is set here - at half the span the plateaus
+// are gone and the film is one continuous ramp, at 0 it is back to three hard bands.
+uniform float ground_blend = 0.0131;   // radians either side of a seam, 0.75 deg
 
 varying vec3 local_pos;
 varying vec3 world_dir;
@@ -98,18 +126,34 @@ vec3 milky_way(vec3 dir) {
 void vertex() {
 	local_pos = VERTEX;
 	world_dir = normalize((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz);
+	POSITION = SKY_CLIP(VIEW_MATRIX * MODEL_MATRIX * vec4(VERTEX, 1.0));
 }
 
 void fragment() {
 	float altitude = clamp(world_dir.y, -1.0, 1.0);
-	float up = pow(max(altitude, 0.0), sky_curve);
 	float down = pow(max(-altitude, 0.0), ground_curve);
-	vec3 unlit = altitude >= 0.0
-			? mix(night_horizon, night_zenith, up)
-			: mix(night_horizon, night_ground, down);
-	vec3 lit = altitude >= 0.0
-			? mix(day_horizon, day_zenith, up)
-			: mix(day_horizon, day_ground, down);
+	// How much of the sky the ground hides here: nothing above the horizon, a quarter for
+	// the film's first layer, and another quarter at each seam below it. The seams are
+	// gradients `ground_blend` wide either side rather than edges (用户 2026-10-14:
+	// "三层间改成渐变"), so the film reads as one sheet lying in three layers: the two
+	// smoothsteps are the seam at -1 span and the one at -2, and there is no third - the
+	// last layer is what is left at the bottom.
+	float seam = ground_blend / ground_span;
+	float depth = -altitude / ground_span;
+	float veil = altitude >= 0.0
+			? 0.0
+			: ground_step * (1.0 + smoothstep(1.0 - seam, 1.0 + seam, depth)
+					+ smoothstep(2.0 - seam, 2.0 + seam, depth));
+	// The sky's own gradient and the ground's own tone, both taken at this altitude. The
+	// sky's runs off the altitude's *size*, because it is the same sky carried on below
+	// the horizon (`reach` is the `up` of the old two-palette form); above the horizon
+	// only it is drawn (`veil` is 0 there, and the two forms are the same picture), and
+	// below it the ground's tone comes in over it layer by layer.
+	float reach = pow(abs(altitude), sky_curve);
+	vec3 unlit = mix(mix(night_horizon, night_zenith, reach),
+			mix(night_horizon, night_ground, down), veil);
+	vec3 lit = mix(mix(day_horizon, day_zenith, reach),
+			mix(day_horizon, day_ground, down), veil);
 	vec3 colour = mix(unlit, lit, day);
 
 	// the glow sits on the Sun's side of the sky, and only while it is low
@@ -121,5 +165,10 @@ void fragment() {
 		colour += twilight_colour * (twilight * band * pow(side, 3.0));
 	}
 
-	ALBEDO = colour + milky_way(normalize(local_pos)) * band_night;
+	// the Milky Way goes through the same film: it is the sky's own content, so it is
+	// read *through* the layers at three quarters, a half, a quarter of its strength
+	// rather than cut off at the horizon (用户 2026-10-14). The stars do not come
+	// through - a point of light is put out by the least haze, and they keep their own
+	// 2 deg mask (star.gdshader, line.gdshader).
+	ALBEDO = colour + milky_way(normalize(local_pos)) * band_night * (1.0 - veil);
 }

@@ -11,7 +11,8 @@
 ##
 ## S1 brought the BSC5 star field, S2 the constellations, S3 this clockwork; S4
 ## the Sun, the Moon and the daylight they bring - and the Moon's own orbit, the one
-## line the sky draws that belongs to a body rather than to the sphere (2026-10-10);
+## line the sky draws that belongs to a body rather than to the sphere (2026-10-10),
+## drawn while the Moon itself is in frame (2026-10-12);
 ## S5 the planets, S6 the ecliptic and the twenty-eight 宿, S7 the compass HUD - whose
 ## rings are a 奇门 chart and a 大六壬 chart cast for the sky's own instant
 ## (`_chart`), the 大六壬 one also standing over the horizon as the heaven ring of
@@ -38,23 +39,50 @@ const HUD_COMPASS_HEIGHT := 300.0
 const GALACTIC_POLE := Vector2(192.85948, 27.12825)    ## RA°, Dec°
 const GALACTIC_CENTRE := Vector2(266.40499, -28.93617)
 
-## The celestial equator and the 二十八宿's divisions along it (S6). The circle is
-## the dimmest thing the sphere carries - it is the scale the 宿 are measured on,
-## not a thing in the sky like the ecliptic - and the ticks are half a degree either
-## side of it, the reach the solar terms have across the ecliptic.
+## The celestial equator and the 二十八宿's divisions along it (S6). The circle is the
+## scale the 宿 are measured on rather than a thing in the sky like the ecliptic, and
+## it is drawn in **淡赤** (2026-10-14, 用户: "天赤道用淡赤色") instead of the dim blue it
+## had; the ticks are the solar terms' own long reach either side of it (`Ecliptic.
+## TICK_LONG`, taken from there rather than restated - this read 1.4, four times the reach
+## the comment beside it claimed, until 用户 asked for them shorter on 2026-10-14: "天赤道的
+## 星宿分野线短一点"), and they are that band's **分野** marked on it in **淡金** (2026-10-14,
+## 用户: "天赤道线上淡色标下星宿分野…用淡金色"). Each 宿's name stands between its own two
+## ticks (SkyLabels, on this card's 星宿 switch).
+##
+## Both are linear additive like every other vertex colour in the sky (计划 §2.3 G4), so
+## these are the linear numbers; the inks the names are written in are sRGB and live
+## next door (SkyLabels.MANSION_COLOUR / MANSION_FIGURE_COLOUR).
 const EQUATOR_WIDTH := 0.26
-const EQUATOR_COLOUR := Color(0.030, 0.044, 0.076)
-const MANSION_TICK := 1.4
+const EQUATOR_COLOUR := Color(0.170, 0.070, 0.062)
+const MANSION_TICK := Ecliptic.TICK_LONG
 const MANSION_TICK_WIDTH := 0.34
-const MANSION_COLOUR := Color(0.098, 0.068, 0.026)
-## The 宿's own star groups (MansionFigures): drawn in the amber the 宿's scale is
-## drawn in rather than the blue of the 88 IAU figures, so the Chinese sky reads as
-## one layer - its divisions and the figures that stand in them. Brighter than the
-## scale is, because a figure is the thing being read and the scale is what it is
-## read against: at the figures' own brightness the amber came out a washed grey
-## against the blue of the night (measured on the 2026-10-10 shot).
+const MANSION_TICK_COLOUR := Color(0.230, 0.180, 0.075)
+## The 宿's own star groups (MansionFigures): drawn in amber rather than the blue of
+## the 88 IAU figures, so the Chinese sky's own figures read apart from the western
+## ones they share the sphere with. Brighter than the equatorial scale is, because a
+## figure is the thing being read and the scale is what it is read against: at the
+## figures' own brightness the amber came out a washed grey against the blue of the
+## night (measured on the 2026-10-10 shot). The names at these groups are gold and
+## the 分野 on the equator pale gold (2026-10-14; SkyLabels).
 const MANSION_FIGURE_WIDTH := 0.40
 const MANSION_FIGURE_COLOUR := Color(0.20, 0.10, 0.028)
+
+## The dome's own zenith colours, here rather than only in the shader because the
+## *background* behind the sky is kept at the same tone: the dome carries the whole sky
+## (it is a full sphere and every map lands it on every pixel of the frame), so what this
+## colour is for is the case where it is not - kept at the zenith's own tone, whatever the
+## dome does not paint reads as sky rather than as a hole. Same numbers as dome.gdshader's
+## defaults, and set on the material so this side is the one source.
+const NIGHT_ZENITH := Color(0.090, 0.130, 0.260)
+const DAY_ZENITH := Color(0.200, 0.255, 0.420)
+
+## The shader-side name of the map switch (the include's own `sky_map`): a *global*
+## shader uniform, because the sky's materials are made in half a dozen places - the
+## dome, the stars, the ribbons, the bodies, the marks - and every one of them has to
+## agree on it. Registered once per run: a background is built again on each switch
+## back to it, while the renderer's list of global uniforms is not per-background.
+const MAP_PARAMETER := "sky_map"
+static var _map_registered := false
 
 var sky_root: Node3D
 var camera: Camera3D
@@ -82,26 +110,33 @@ var _time_bar: SkyTimeBar
 var _mansions: Mansions
 var _equator: MeshInstance3D
 var _mansion_ticks: MeshInstance3D
-## The 宿's own star groups (MansionFigures) and whether they are drawn: the 菜单's
+## The 宿's own star groups (MansionFigures) and whether they are drawn: the card's
 ## 星宿 switch, the counterpart of the 星座 one.
 var _mansion_figures: MeshInstance3D
 var _mansion_figures_shown := true
 var _pan: Dictionary = {}      ## the 奇门 chart of the drawn instant (S7)
 var _liuren: Dictionary = {}   ## the 大六壬 chart of the drawn instant
 var _chart_key := ""
+## Whether the card has been handed the chart it is drawn from: false again whenever a HUD
+## is built, so a background switch's new card gets the chart even though the 时辰 has not
+## turned since (`_chart`).
+var _chart_sent := false
 ## The 农历 line, and the local day it was worked out for: the calendar is derived
 ## from the Sun and Moon, so it is cached rather than recomputed per time step.
 var _lunar_day := 0
 var _lunar := ""
 var _dome: MeshInstance3D
+## The environment behind the sky, kept for one thing: its background colour is the tone
+## behind the dome, and _light() walks it with the sky.
+var _world: WorldEnvironment
 var _stars: MeshInstance3D
 var _figures: MeshInstance3D
 var _boundaries: MeshInstance3D
 ## The ecliptic and its solar-term ticks (S6), which share the lighting and zoom
 ## treatment of the figure/boundary layers.
 var _ecliptic: Array = []
-## Whether the constellation figures and their Chinese names are drawn: the 菜单's
-## 星座 switch (`menu_switches`). On to begin with - the figures are what makes the
+## Whether the constellation figures and their Chinese names are drawn: the card's
+## 星座 switch (`set_layer_switch`). On to begin with - the figures are what makes the
 ## constellations readable.
 var _figures_shown := true
 
@@ -117,6 +152,7 @@ func display_name() -> String:
 
 
 func build(_host: Node) -> void:
+	_choose_map()
 	_build_environment()
 	sky_root = Node3D.new()
 	sky_root.name = "SkyRoot"
@@ -148,6 +184,9 @@ func build_hud() -> Control:
 	hud.add_child(compass)
 	compass.setup(rig, clock, observer)
 	_compass = compass
+	# the card built here has not been handed the chart yet, whatever the 时辰 has done
+	# since (a background switch at a standing 时辰 is exactly that case)
+	_chart_sent = false
 
 	var bar := SkyTimeBar.new()
 	bar.name = "TimeBar"
@@ -155,12 +194,25 @@ func build_hud() -> Control:
 	bar.size = Vector2(float(hud_size().x), float(hud_size().y) - HUD_COMPASS_HEIGHT)
 	hud.add_child(bar)
 	bar.setup(clock)
+	# the two layer switches are the card's chips now (用户 2026-10-12 第二十一轮): the
+	# bar says one was thrown, the sky does the work and the chip is shown the state
+	# it ended in
+	bar.switch_toggled.connect(set_layer_switch)
 	_time_bar = bar
+	_show_layer_switches()
 	# the chart was cast and the bodies placed before the HUD existed: hand both
 	# over now
 	_bodies()
 	_chart()
 	return hud
+
+
+## Where the shell's own switch stands on this card: the time bar's seat in the card's
+## lower left column, under 星座 and 星宿 (2026-10-12 第二十一轮, the user moving the 桌面
+## switch out of the 菜单 and onto the card). Null before the HUD exists - the shell asks
+## right after build_hud().
+func hud_shell_slot() -> Control:
+	return null if _time_bar == null else _time_bar.shell_switch_slot()
 
 
 func hud_size() -> Vector2i:
@@ -173,39 +225,91 @@ func hud_size() -> Vector2i:
 	return Vector2i(300, 340)
 
 
-## The switches the sky offers the 菜单 (`Background.menu_switches`): the 88
-## constellation figures with their Chinese names, and the 宿's own star groups
-## (MansionFigures) - the two layers the sky can do without, and the pair the two
-## names of the sky's line work are turned off by. The stars, the branch rings and the
-## compass card are not touched by either.
-func menu_switches() -> Array:
-	return [{"id": "figures", "label": "星座", "on": _figures_shown},
-			{"id": "mansions", "label": "星宿", "on": _mansion_figures_shown}]
+## Registers the map switch and hands the shaders and the CPU side the same one:
+## `--sky-map=fisheye|lens|pan|cylinder` (default fisheye). The uniform has to exist
+## before any sky shader is compiled, which is why this is the first thing build() does;
+## a background is rebuilt on every switch back to it, so the registration itself happens
+## once.
+func _choose_map() -> void:
+	# the fisheye is the default since 2026-10-14: the sky is a real sphere with the stars
+	# pinned to it and a plain Camera3D at its centre, and every vertex is placed by its
+	# angle off the view axis at one constant scale, so a degree of sky is a degree of
+	# pixel in every direction and neither of the two motions 用户 reads the sky by
+	# stretches anything (2026-10-14: "改用鱼眼/等距柱状投影 重新校正星空"; the complaint
+	# was the lens' sec^2 - "当前中心正常，周围被拉伸放大"). The camera's own lens - 用户
+	# 2026-10-12's own ask ("要真 3D 投射啊") - and the two straight-horizon grids are a
+	# switch away, measured in README「星点、记号与取舍」.
+	# OPENING_FOV comes from SkyProjection.preferred_fov(): the fisheye's own opening
+	# field (96 - the zenith on the frame's top edge with the horizon across its bottom and
+	# the ground under it clearing the desktop's taskbar by a 地支, 171 deg of bearing, so
+	# turning in azimuth alone walks every star past the observer), and 100 for the two
+	# grids that put the angle itself on the frame.
+	var chosen := SkyProjection.Map.FISHEYE
+	if opts != null:
+		match opts.text("sky_map", "fisheye"):
+			"cylinder":
+				chosen = SkyProjection.Map.CYLINDER
+			"fisheye":
+				chosen = SkyProjection.Map.FISHEYE
+			"lens":
+				chosen = SkyProjection.Map.LENS
+			"pan":
+				chosen = SkyProjection.Map.PAN
+	SkyProjection.map = chosen
+	if _map_registered:
+		RenderingServer.global_shader_parameter_set(MAP_PARAMETER, int(chosen))
+		return
+	RenderingServer.global_shader_parameter_add(MAP_PARAMETER,
+			RenderingServer.GLOBAL_VAR_TYPE_INT, int(chosen))
+	RenderingServer.global_shader_parameter_set(MAP_PARAMETER, int(chosen))
+	_map_registered = true
 
 
-func set_menu_switch(id: String, on: bool) -> void:
+## The two layer switches, as the card carries them (用户 2026-10-12 第二十一轮: 把菜单里
+## 的星座星宿开关转到 HUD 上): the bar's 星座/星宿 chips say one was thrown and the work
+## is done here. `figures` is the 88 constellation figures with their Chinese names,
+## `mansions` the 宿's own star groups (MansionFigures) with the 宿's names, the 廿四节气
+## names on the ecliptic (2026-10-14) and the 斗's stars' own 神名 in place of their 星名 -
+## the layers the sky can do without, and the pair the sky's two names of line work are
+## turned off by. The stars, the branch rings and the compass card are not touched by
+## either; the pole star stays too - it is a star rather than a figure, and it carries
+## one name.
+func set_layer_switch(id: String, on: bool) -> void:
 	match id:
 		"figures":
 			_figures_shown = on
 			if _figures != null:
 				_figures.visible = on
 			# the 星座 switch takes the figures and their 88 names, and leaves the 宿's
-			# scale and the planets' names on the sky (SkyLabels.set_figures)
+			# scale, the planets' names and the pole star's on the sky
+			# (SkyLabels.set_figures)
 			if _labels != null:
 				_labels.set_figures(on)
 		"mansions":
 			_mansion_figures_shown = on
 			if _mansion_figures != null:
 				_mansion_figures.visible = on
-			# the 星宿 switch takes the 宿's ribbons and their 星官 names, and leaves the
-			# 宿's scale on the sky (the same split as 星座)
+			# the 星宿 switch takes the 宿's names, the ribbons and their 星官 names, the
+			# 廿四节气 names, and names the 斗's stars by their 神名 instead of their 星名,
+			# and leaves the 宿's own scale - the equator, the 距星 ticks and the ecliptic's
+			# term ticks - on the sky (the same split as 星座)
 			if _labels != null:
-				_labels.set_mansion_figures_shown(on)
+				_labels.set_mansions_shown(on)
 		_:
 			return
+	print("XuanDesk: sky: layer '%s' %s" % [id, "on" if on else "off"])
 	# the wallpaper idles between time steps, so a change of its own has to ask
 	# for the frame that shows it (Policy.ON_DEMAND)
 	request_redraw()
+
+
+## Hands the two layer switches' own state to the card, which draws it: called once
+## when the HUD is built, because both are already set by then (`--sky-figures=0`,
+## `--sky-mansions=0` and the defaults in build()).
+func _show_layer_switches() -> void:
+	if _time_bar != null:
+		_time_bar.set_switch("figures", _figures_shown)
+		_time_bar.set_switch("mansions", _mansion_figures_shown)
 
 
 func render_policy() -> int:
@@ -223,11 +327,13 @@ func vignette_shader() -> Shader:
 # --------------------------------------------------------------------- scene
 
 func _build_environment() -> void:
-	# The night sky itself is the dome mesh below; this is the colour behind it,
-	# tonemapped the way the stars are so the whole frame sits in one grade.
+	# The night sky itself is the dome mesh below; this is the colour behind it - the
+	# tone the sky falls back to wherever the dome does not paint - so it starts at the
+	# night zenith's own tone (NIGHT_ZENITH) rather than at a colour of its own, and
+	# _light() walks it to the day one with the sky.
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.02, 0.03, 0.06)
+	env.background_color = NIGHT_ZENITH
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.tonemap_white = 6.0
 	env.adjustment_enabled = true
@@ -240,10 +346,10 @@ func _build_environment() -> void:
 	env.glow_hdr_threshold = 0.85
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
 
-	var world := WorldEnvironment.new()
-	world.name = "WorldEnvironment"
-	world.environment = env
-	add_child(world)
+	_world = WorldEnvironment.new()
+	_world.name = "WorldEnvironment"
+	_world.environment = env
+	add_child(_world)
 
 
 ## The celestial sphere's inner surface: a gradient dome sized so it always
@@ -265,6 +371,10 @@ func _build_dome() -> void:
 			StarCat.direction(GALACTIC_POLE.x, GALACTIC_POLE.y))
 	material.set_shader_parameter("galactic_centre",
 			StarCat.direction(GALACTIC_CENTRE.x, GALACTIC_CENTRE.y))
+	# the two tones of the dome's own zenith, set from here so the gradient the shader
+	# draws and the colour behind the sky cannot drift apart
+	material.set_shader_parameter("night_zenith", NIGHT_ZENITH)
+	material.set_shader_parameter("day_zenith", DAY_ZENITH)
 	dome.material_override = material
 	sky_root.add_child(dome)
 	_dome = dome
@@ -302,6 +412,10 @@ func _build_catalogue() -> void:
 	# the blue out of the way (the same reason --sky-boundaries exists).
 	_figures_shown = opts == null or opts.flag("sky_figures", true)
 	_figures.visible = _figures_shown
+	# and so can the 星宿 layer (the card's other switch), whose own ribbons are built
+	# further down: read here so that the labels, which are built before them, are told
+	# the state the card will show. A shot of the 星宿-off sky is the reason it exists.
+	_mansion_figures_shown = opts == null or opts.flag("sky_mansions", true)
 	print("XuanDesk: sky: %d stars, %d figure segments, %d boundary segments"
 			% [star_count, _ribs(_figures), 0 if _boundaries == null \
 					else _ribs(_boundaries)])
@@ -313,17 +427,17 @@ static func _ribs(layer: MeshInstance3D) -> int:
 
 
 ## The ecliptic: the Sun's own circle on the sphere, with a tick at each of the
-## twenty-four solar terms and a ring round the vernal equinox (计划 §6.5 S6,
-## 2026-10-10). Static geometry in the catalogue frame like everything else the
-## sphere carries, but its divisions are λ measured from the equinox of the sky's
-## own instant, so it is built once the clock has been set - and it is the same
-## Ecliptic data the HUD's own readings of λ are taken from, so the drawn 春分 tick,
-## the ringed 春分点 and the HUD's 春分 are the same point.
+## twenty-four solar terms (计划 §6.5 S6, 2026-10-10) and all twenty-four named on it
+## (2026-10-14 用户: "二十四节气都显出"). Static geometry in the catalogue frame like
+## everything else the sphere carries, but its divisions are λ measured from the equinox
+## of the sky's own instant, so it is built once the clock has been set - and it is the
+## same Ecliptic data the HUD's own readings of λ are taken from, so the drawn 春分 tick,
+## the named 春分 and the HUD's 春分 are the same point.
 func _build_ecliptic() -> void:
 	var jd := clock.julian_day()
 	_ecliptic = Ecliptic.build(sky_root, jd)
 	if _labels != null:
-		_labels.set_equinox(Ecliptic.vernal_equinox(jd))
+		_labels.set_terms(Ecliptic.term_points(jd))
 
 
 ## The twenty-eight 宿 (S6): the equatorial divisions, drawn on the equator they are
@@ -351,6 +465,13 @@ func _build_mansions() -> void:
 
 	var ticks := []
 	var names := []
+	# A 宿's name stands at the middle of its own 分野 - the span its 距星 opens - on the
+	# equator it is measured along, and the two ticks either side of that span are what
+	# makes the division readable (2026-10-14, 用户: "天赤道线上淡色标下星宿分野,仅星宿开关
+	# 开时显宿名"). It used to stand on the 星官 the 宿 is named for, which is what 分野
+	# would call the shape rather than the region: since the 星官 names are drawn at the
+	# groups anyway (gold, SkyLabels), the division's own name is the one that was
+	# missing from the scale, and the star groups keep theirs either way.
 	for index in Mansions.NAMES.size():
 		var ra := _mansions.boundary_ra[index]
 		ticks.append([StarCat.direction(ra, -MANSION_TICK),
@@ -358,7 +479,7 @@ func _build_mansions() -> void:
 		names.append({"name": Mansions.NAMES[index],
 				"direction": _mansions.centre_direction(index)})
 	_mansion_ticks = SkyLines.polyline_layer(sky_root, ticks, MANSION_TICK_WIDTH,
-			MANSION_COLOUR, "MansionTicks")
+			MANSION_TICK_COLOUR, "MansionTicks")
 	if _labels != null:
 		_labels.set_mansions(names)
 	print("XuanDesk: sky: 二十八宿 %d divisions, 觜 %.2f deg, 井 %.2f deg"
@@ -377,11 +498,12 @@ func _build_mansions() -> void:
 func _build_mansion_figures() -> void:
 	if _catalogue == null:
 		return
-	var chains := MansionFigures.chains(_catalogue)
+	var chains: Array = MansionFigures.chains(_catalogue)
 	if chains.is_empty():
 		return
 	_mansion_figures = SkyLines.polyline_layer(sky_root, chains, MANSION_FIGURE_WIDTH,
 			MANSION_FIGURE_COLOUR, "MansionFigures")
+	_mansion_figures.visible = _mansion_figures_shown
 	# the ribbons come with their names: a 宿 is a dozen 星官, and 2 to 10 stars that
 	# are not named read as loose strokes (the 88 have had their names since S2 for the
 	# same reason)
@@ -430,6 +552,7 @@ func _build_labels() -> void:
 	_labels = labels
 	labels.setup(_catalogue, camera, sky_root)
 	labels.set_figures(_figures_shown)
+	labels.set_mansions_shown(_mansion_figures_shown)
 
 
 func _build_camera() -> void:
@@ -458,6 +581,11 @@ func _build_clock() -> void:
 	clock = TimeCore.new()
 	clock.name = "TimeCore"
 	add_child(clock)
+	# each grid opens at the field it is composed for (SkyProjection.preferred_fov: 100
+	# for the pan grid and the cylinder, whose frame's x is the azimuth - the whole
+	# southern half - and 110 for the camera's own lens), unless the command line says
+	# otherwise
+	rig.set_fov(SkyProjection.preferred_fov())
 	if opts != null:
 		if opts.has("sky_time"):
 			clock.set_time_unix(time_from_text(opts.text("sky_time", "")))
@@ -508,35 +636,30 @@ func _apply_time() -> void:
 ## step: the card is read as bearings, and the Sun, the Moon and the planets are the
 ## only things on the sky that are not pinned to it, so they are placed again rather
 ## than cast with the charts. Each is Vector2(altitude, azimuth) - `Astro.altaz()`'s
-## own pair. The 二十八宿's openings come over the same way, for the same reason.
+## own pair. The 二十八宿 used to come over the same way; the card carries the clock's
+## own scale only now (2026-10-14), and the 宿 are the sky's (its equator holds the
+## 分野 names and their 距星 marks, `SkyLabels` and `_mansion_ticks`).
 func _bodies() -> void:
 	if _compass == null:
 		return
 	var basis := sky_root.basis
 	_compass.set_bodies(_altaz(basis * sun.direction), _altaz(basis * moon.direction),
 			_planet_marks(basis))
-	_compass.set_mansions(_mansion_marks(basis))
 
 
 ## The planets as the dial's own marks: where each stands, its own colour, and the
-## magnitude ramp the sky's own mark is read off.
+## magnitude ramp the sky's own mark is read off. The card takes the **五星** and not
+## the sky's whole list (用户 2026-10-14: "日月金木水火土星保留...五行星用五行色点"): the
+## dial is read as 日 + 月 + 五星 - the classical seven 政 - while **the wallpaper keeps
+## all seven**: 天王/海王 still stand on the sphere with their trails and their names,
+## they are simply not marks on this card.
 func _planet_marks(basis: Basis) -> Array:
 	var marks := []
 	for state: SkyPlanets.PlanetState in planets.states:
+		if not SkyPlanets.FIVE_STARS.has(state.name):
+			continue
 		marks.append({"at": _altaz(basis * state.direction), "colour": state.colour,
 				"norm": SkyPlanets.mark_norm(state.magnitude)})
-	return marks
-
-
-## The 宿's openings as bearings: an equatorial division is not a fixed point of the
-## horizon, so which way one faces has to be worked out for the instant, the way the
-## bodies are.
-func _mansion_marks(basis: Basis) -> Array:
-	if _mansions == null:
-		return []
-	var marks := []
-	for index in Mansions.NAMES.size():
-		marks.append({"at": _altaz(basis * _mansions.opening_direction(index))})
 	return marks
 
 
@@ -571,7 +694,8 @@ func _chart() -> void:
 		return
 	var pillars := GanZhi.of(clock.julian_day(), observer.local_datetime(clock.unix()))
 	var key := "%s %s" % [pillars["hour"], pillars["term"]]
-	if key != _chart_key:
+	var turned := key != _chart_key
+	if turned:
 		_chart_key = key
 		_pan = QiMen.pan(pillars)
 		_liuren = LiuRen.pan(pillars)
@@ -579,7 +703,12 @@ func _chart() -> void:
 	if _branches != null:
 		_branches.set_heaven(_liuren.get("slots", []))
 	var ju := int(_pan.get("ju", 0))
-	if _compass != null:
+	# the card is handed the chart on the turn and not on every tick: handing it over is
+	# what starts the card's own 换字飞转 (2026-10-13), and a tick that carries the same
+	# chart has nothing to hand over. `_chart_sent` is the one case that is not a turn -
+	# the chart was cast before the HUD existed, and the card built for it is still empty.
+	if _compass != null and (turned or not _chart_sent):
+		_chart_sent = true
 		# the 驿马 is a branch, and the dial places marks by index (0 = 子); the
 		# 旬空 two 支 ride along for the 神盘's 〇; the 局 is what the 八分盘's 内盘
 		# half is read off
@@ -632,6 +761,9 @@ func _light() -> void:
 	dome_material.set_shader_parameter("day", day)
 	dome_material.set_shader_parameter("twilight", Astro.twilight(altitude))
 	dome_material.set_shader_parameter("sun_world", sun_world)
+	# the same walk for the colour behind the sky: it is the zenith's tone either side
+	# of the day
+	_world.environment.background_color = NIGHT_ZENITH.lerp(DAY_ZENITH, day)
 	var night := lerpf(DAY_STAR_FLOOR, 1.0, 1.0 - day)
 	dome_material.set_shader_parameter("band_night",
 			lerpf(DAY_BAND_FLOOR, 1.0, 1.0 - day))
@@ -653,6 +785,10 @@ func _on_view_changed() -> void:
 		_labels.refresh()
 	if _branches != null:
 		_branches.refresh()
+	# the orbit is drawn only while the Moon is in frame, which is a question about
+	# the view: it is answered here, on every change of it
+	if moon != null:
+		moon.set_view(camera)
 	_scale_marks()
 	request_redraw()
 
