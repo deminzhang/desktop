@@ -39,8 +39,22 @@ if [ -z "$WINDRES_BIN" ]; then
   exit 1
 fi
 
-"$WINDRES_BIN" tray.rc -O coff -o tray_res.o
-"$GCC_BIN" -O2 -s -Wall -Wextra -mwindows -o ../bin/host.exe host.c tray_res.o \
+# windres preprocesses the .rc by running the gcc *beside it*, spelled out with
+# that full path - a mingw under "C:\Program Files\..." comes back unquoted and
+# the command line splits at the space ("preprocessing failed"). Naming gcc bare
+# lets PATH resolve it (with gcc's own directory put first, when it has one); the
+# flags have to be spelled out because --preprocessor replaces the whole command,
+# not just the program.
+if [ "$GCC_DIR" != "." ]; then PATH="$GCC_DIR:$PATH"; fi
+"$WINDRES_BIN" tray.rc -O coff -o tray_res.o \
+    --preprocessor="gcc -E -xc-header -DRC_INVOKED"
+
+# __USE_MINGW_ANSI_STDIO: recent mingw-w64 gcc defaults to its own printf, but an
+# older one (7.x, as shipped in "C:\Program Files\mingw") hands %llu straight to
+# msvcrt, which does not know "ll" - the metric frame's seq/mem/up fields print
+# garbage. Asking for it explicitly is a no-op on the new toolchains.
+"$GCC_BIN" -O2 -s -Wall -Wextra -mwindows -D__USE_MINGW_ANSI_STDIO=1 \
+    -o ../bin/host.exe host.c tray_res.o \
     -lws2_32 -liphlpapi -luser32 -ladvapi32 -lshell32
 rm -f tray_res.o
 echo "built bin/host.exe with $GCC_BIN"

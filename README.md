@@ -35,14 +35,20 @@ Windows 桌面最底下的一层壁纸进程：可切换的 **3D 背景**（现�
 export G="E:/Program Files (x86)/Steam/steamapps/common/Godot Engine/godot.windows.opt.tools.64.exe"
 
 # 1) 构建原生宿主（Windows 侧执行，不要在 bash 脚本里跑，见 T1/T2/T8）
-#    托盘图标是编进 exe 的资源，所以先 windres 再链接（windres 和 gcc 同目录；
-#    .ico 的相对路径按当前目录解析，所以两条命令的 cwd 都要在 native/）
+#    托盘图标是编进 exe 的资源，所以先 windres 再链接（.ico 的相对路径按当前目录
+#    解析，所以两条命令的 cwd 都要在 native/）。两个开关不要省：
+#      --preprocessor=…    windres 默认用**自己旁边那个 gcc** 预处理 .rc，且把它的
+#                          完整路径原样拼进命令行 —— gcc 装在带空格的路径下就断（T22）
+#      __USE_MINGW_ANSI_STDIO=1  老 mingw 的 %llu 会落到 msvcrt 上印出垃圾数（T23）
 cd native
-windres tray.rc -O coff -o tray_res.o
-C:/mingw64/bin/gcc.exe -O2 -s -Wall -Wextra -mwindows -o ../bin/host.exe host.c tray_res.o \
+windres tray.rc -O coff -o tray_res.o \
+    --preprocessor="gcc -E -xc-header -DRC_INVOKED"
+C:/mingw64/bin/gcc.exe -O2 -s -Wall -Wextra -mwindows -D__USE_MINGW_ANSI_STDIO=1 \
+    -o ../bin/host.exe host.c tray_res.o \
     -lws2_32 -liphlpapi -luser32 -ladvapi32 -lshell32
 rm tray_res.o
-#    （或 native/build.cmd / native/build.sh，它们自己找 gcc 与 windres、并清掉中间件）
+#    （或 native/build.cmd / native/build.sh，它们自己找 gcc 与 windres、并清掉中间件；
+#      两者与上面这两条等价，改一处要改三处）
 
 # 2) 导入工程（新增/移动 class_name 或目录后必须跑，否则报 "Could not find type X"）
 "$G" --headless --path . --import
@@ -739,6 +745,17 @@ HUD 的按钮、以及**宿主搬动/改尺寸窗口之后**（G36：`_on_screen
 | T20 | 盘**右上角**的 `↘` 箭头 chip 看不见、点了没反应 | 壳的 `菜单` 曾是**独立 OS 窗口**，glue 在 HUD 内容右上角——窗口在 HUD **之上**，压在 `↘` 的字形上：字被盖住、点击也归它 | 当时的解是 `MENU_TOP = -28`（菜单悬在内容上方，让开盘角），第二十一轮收回到 -20。**2026-10-13 整条退休**：菜单进了托盘，HUD 右上角不再有第二扇窗（出图核过：`--shot-target=hud` 的 300×340 里两颗转角箭头都在、无遮挡）。教训仍在：**叠在别人的窗口上，就是会赢它的字形和点击** |
 | T21 | 用 `PostMessage` 驱动**托盘菜单**时"点了没反应"（2026-10-13） | ① 回调语义按**默认通知版本**：`wParam`=图标 id、`lParam`=鼠标消息（`WM_RBUTTONUP`）——`NIM_SETVERSION`(4) 之后 `lParam` 变成坐标打包；② 菜单开在**光标处**，光标停在菜单左上角时第一行**已经是热的**，要**先移开再移回来**才会展开子菜单；③ 子菜单往哪边开看有没有地方：**屏右边开在左、屏中开在右**；④ 本机那个置顶的时钟 App 会**盖住任务栏角上的菜单** | 开菜单：`PostMessage(hwnd, WM_APP+1, 1, WM_RBUTTONUP)` 给 `XuanDeskTray`；点行用真鼠标点像素；判据取 `host.log` 的 `tray: …` 与**客户端那行日志成对**出现（README「验证」有一行专讲这个手法） |
 
+换台机器以后（2026-10-14，**第二台：工程在 `C:/Work/desktop`，gcc 是 `C:\Program Files\mingw` 下的 7.3.0**，不是 `C:/mingw64` 的 15.1.0）多出来的三条：
+
+| # | 陷阱 | 处置 |
+|---|---|---|
+| T22 | `native/build.cmd` 里 `windres` 报 `preprocessing failed`，前面还夹着一行 `'C:\Program' 不是内部或外部命令` | windres 预处理 .rc 用的是**自己旁边那个 gcc**，并把它的**完整路径原样拼进命令行**——gcc 装在 `C:\Program Files\...` 下就被空格劈开。`--preprocessor` 换掉的是**整条命令**（不是只换程序），所以要写全才行 |
+| | | `--preprocessor="gcc -E -xc-header -DRC_INVOKED"`，并先把 gcc 自己的目录塞到 PATH 最前，让 PATH 去解析那个 `gcc`（`build.cmd` / `build.sh` 里已经带上） |
+| T23 | 同一台机器 `bin\host.exe` 链得出，指标帧里的 `seq` / `mem_used` / `mem_total` / `up` 却是垃圾数 | 老 mingw-w64 gcc（7.x）**默认不用自己那套 ANSI printf**：`%llu` 直接落到 msvcrt 的 printf，而它不认 `ll`。当时 `-Wall` 就报了 `unknown conversion type character 'l'`，很容易被当成噪音划过去 |
+| | | 编译加 `-D__USE_MINGW_ANSI_STDIO=1`（新工具链上本来就是默认，等于空操作）。**判据**：那条 `gcc -Wall` 命令行**一行输出都不该有** |
+| T24 | 全新克隆的机器上 `run.bat` 起得来，但**桌面浮在图标上面、HUD 也不出现**（用户 2026-10-14 报的就是这一条） | `bin/host.exe` **不在 git 里**（`*.exe` 被忽略，要 `native/build.cmd` 现建），于是没有东西把窗口挂进 WorkerW（壁纸变成普通窗口）、没有东西 `ShowWindow(SW_SHOWNOACTIVATE)`（G8：Godot 建的 overlay 窗 `IsWindowVisible = 0`）、也没有托盘和热键——**两条症状同一个根因**，界面上只表现为"没生效" |
+| | | 先看 `%LOCALAPPDATA%\XuanDesk\host.log` **在不在**：文件根本不生成就是宿主没起来（客户端那一侧是 Godot 自己 `logs/godot*.log` 里的 `Could not create child process` ＋ `could not launch bin/host.exe`）。装一台机器三步：`native/build.cmd` → `--headless --path . --import` → `run.bat` |
+
 ---
 
 ## 验证
@@ -762,8 +779,12 @@ HUD 的按钮、以及**宿主搬动/改尺寸窗口之后**（G36：`_on_screen
 | **对权威** | 日月行星 | JPL Horizons `QUANTITIES='1'`（astrometric RA/Dec，geocentric：`CENTER='500@399'`），`TLIST` 传一组 JD，逐点算角距 |
 | **字位 A/B**（同一瞬刻两张 HUD 出图：`--sky-time` 固定 + `--sky-rate=0`，按 `_build_plate()` 给的锚点**只数暖色墨**） | "这张卡的排法动没动"（2026-10-13 换字飞转时立的判据） | **整幅逐像素差会被表针污染**（两次运行的墙上时钟不同）→ 只数暖色墨（环字与马是琥珀/金/红，表针是冷白），并配**同一份代码两次运行**的负对照（实测噪声底 1…24 px/字、整幅 0.96…1.04/255，分档 ≈ 487/529/28）。改动前后：环上 **13/13** 字的暖色墨完全相同、整幅 0.945 vs 负对照 0.957。**另一个坑**：把一行字放进 `draw_set_transform` 再画，位置看着一样而**栅格化不一样**（实测 24 行各差 3…57 px）——静止的字一律直接给绝对锚点 |
 | **负对照** | 每一条断言 | 探针自己也要被怀疑：等距刻在 15° 旋转下不变（G25），所以盘上留了一个唯一标记（"子/北"那根青刻）来读数 |
+| **停壳减图**（桌面跑着的时候截一张 → `Stop-Process` 掉 godot 与 host 再截一张 → 逐像素差） | "3D 桌面到底上没上屏"（也就是 W7 那条：系统壁纸照片会盖住我们） | 与 HUD 无关的左半边差 **99.2%**、右下角 **99.4%**、最底下那条 **99.4%**（2026-10-14 第二台机器）⇒ 整块屏都是我们画的。**被系统壁纸照片盖住时这个数会≈0**——它是这条唯一能分辨"挂成功了但看不见"的判据。角落那两块不是凑数：窗口若只有虚拟化出来的 `1536×864`（宿主 DPI 不感知，面板实为 1920×1080 @125%），右/下那 20% 就不会动。结构那半边更省事：`Progman` 的子窗口序 `SHELLDLL_DefView@0 … WorkerW@3`，我们的窗口在这个 WorkerW 里 ⇒ 壁纸层在图标层**之后**（z 序更下）＝图标在上 |
 | **跨进程穿透**（HUD 下面摆一个**另一个进程**的窗口，再用 `SendInput` 真点一下 HUD 上的点） | `穿透` 那条路（2026-10-13，G40） | 目标窗**自己写日志**才算数：穿透开 → 它记下 `WM_LBUTTONDOWN`；穿透关 → 它一条都没有、`WindowFromPoint` 回 HUD。两处干扰要处理：① 点击前先 `SetWindowPos(HWND_TOP)` 把目标提上来（别的 App 的窗口会插到它上面，第一轮就是这么误判的）；② "HUD 还画着"不能靠"没崩"，要**把 HUD 藏起来再显示**做减图（藏起来 65.3% 像素不同、显示回去 0.5%＝动画表针） |
 
 碎图与探针**用完即删**（探针里那些"临时改一个常数再减图"的开关同理）；跑完整套前先确认没有遗留进程
 （`.tmp/tools/xuankill.ps1` 打印 `clean`，即 `Get-Process | Where ProcessName -like '*godot*' -or -eq 'host'` 为 0）。
+第二台机器那条（T24）留的是 **`layer_on.png` / `layer_off.png`** —— 同一台桌面、壳跑着的那张与杀掉壳后的那张，
+就是「停壳减图」那一行的两张底图。同机的探针（`.tmp/tools/deskprobe.ps1` 读 Progman 的子窗口序、
+`.tmp/tools/imgdiff.ps1` 逐像素差、`.tmp/tools/frame_probe.ps1` 自己当客户端读一帧指标）也留在那儿。
 `.tmp/shots/` 里现在留着 **2026-10-14 那一轮鱼眼的图**（`fy_open.png` 那一轮的开场（35°/80）、`fy_az190.png` 转 10°、`fy_pole.png` 北极星那一片、`fy_pole_t06.png` +6 h、`fy_{lens,pan,cylinder}.png` 三支对照、`fy_straight.png` 视轴压到地平线上、`fy_view.png` 对照场景、`fy_hud.png` 盘面）**和银河那条地平层的对照**（同一瞬刻 `2026-10-22T12:24Z`、同一机位：`mw_before.png` 银河整片压在地面上 / `mw_steps.png` 三层硬边那一版 / `mw_layers.png` 现在这三层渐变；`mw_ground_ab.png` 把这三张的地面区拼成一张，上→下＝之前 / 硬边 / 渐变）；更早那些（`c3_*` / `p_*` / `m_*`）只是当时的留痕，数字与判据照旧有效，图不再补；本轮（2026-10-14 廿四节气 + 斗的两套名字 + 赤道三支墨）留的是 `lbl_*` 那七张（`lbl_eq_{on,off}.png` 是赤道那两张）；**步长单位那一轮**留 `hud_unit.png`（`--shot-target=hud` 的整张 HUD）+ `hud_unit_crop.png`（右列 5×）、`hud_cycle_{0..4}.png`（进程内按 `>>` 五次的真 HUD 窗）+ `hud_cycle_{1,3}_col.png`（右列 4×）；**天空取景那一轮前半（44°/93° ＋ 淡白天顶虚十字）**留的是 `frame_93_44.png`、`view_93_small.png`（半尺寸）、`cross_off93.png`（天顶十字 6×），**同一轮后半（42.5°/96° ＋ 任务栏以上露一个字 ＋ 两支刻收短）**留的是 `frame_96_42.5.png`（默认那一帧）、`frame_96_fixed.png`（同一帧钉在 `2026-10-14T14:00:00`，刻的像素读数用它）、`bottom_marks.png`（底中 4×、画了任务栏那条红边：`午` 清楚、`南` 被削）、`tick_mansion2.png`（赤道分野刻 4×）、`tick_term2.png`（黄道节气刻 2×）；**刻度和五星那一轮**留 `hud_nomansion.png`（分野刻去掉后的整张 HUD）+ `hud_nomansion_zoom.png`（整张盘 3×）、`hud_moon_zoom.png`（月位 40×40 放大 6× 的月牙）。挡 importer 的 `.gdignore` 在 `.tmp/` 上（G12/G34）。
