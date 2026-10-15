@@ -1,19 +1,19 @@
 ## The "sky" background: a real star sphere with the celestial machinery on top,
-## built in stages (计划 §6.5).
+## built in stages (README「星点、记号与取舍」).
 ##
 ## This file is the stage door: it stands up the celestial sphere - the night-sky
 ## dome (real geometry: an environment-only scene never presents into the
-## wallpaper window, 计划 §2.2 V3) and the `SkyRoot` node every other layer hangs
+## wallpaper window, README V3) and the `SkyRoot` node every other layer hangs
 ## its objects from - and it owns the three pieces that say *when* and *from
 ## where* the sky is seen: the Observer, the TimeCore clock and the CameraRig.
 ## Turning the sky to a date and a place is one assignment to SkyRoot's basis
 ## (Astro.sky_basis), which is why the sphere can idle between frames.
 ##
-## S1 brought the BSC5 star field, S2 the constellations, S3 this clockwork; S4
-## the Sun, the Moon and the daylight they bring - and the Moon's own orbit, the one
+## The BSC5 star field came first, then the constellations, then this clockwork; the Sun,
+## the Moon and the daylight they bring came next - and the Moon's own orbit, the one
 ## line the sky draws that belongs to a body rather than to the sphere (2026-10-10),
 ## drawn while the Moon itself is in frame (2026-10-12);
-## S5 the planets, S6 the ecliptic and the twenty-eight 宿, S7 the compass HUD - whose
+## then the planets, the ecliptic and the twenty-eight 宿, then the compass HUD - whose
 ## rings are a 奇门 chart and a 大六壬 chart cast for the sky's own instant
 ## (`_chart`), the 大六壬 one also standing over the horizon as the heaven ring of
 ## branches, and whose marks outside them are the bodies, the Sun, the Moon and the
@@ -39,7 +39,7 @@ const HUD_COMPASS_HEIGHT := 300.0
 const GALACTIC_POLE := Vector2(192.85948, 27.12825)    ## RA°, Dec°
 const GALACTIC_CENTRE := Vector2(266.40499, -28.93617)
 
-## The celestial equator and the 二十八宿's divisions along it (S6). The circle is the
+## The celestial equator and the 二十八宿's divisions along it. The circle is the
 ## scale the 宿 are measured on rather than a thing in the sky like the ecliptic, and
 ## it is drawn in **淡赤** (2026-10-14, 用户: "天赤道用淡赤色") instead of the dim blue it
 ## had; the ticks are the solar terms' own long reach either side of it (`Ecliptic.
@@ -49,7 +49,7 @@ const GALACTIC_CENTRE := Vector2(266.40499, -28.93617)
 ## 用户: "天赤道线上淡色标下星宿分野…用淡金色"). Each 宿's name stands between its own two
 ## ticks (SkyLabels, on this card's 星宿 switch).
 ##
-## Both are linear additive like every other vertex colour in the sky (计划 §2.3 G4), so
+## Both are linear additive like every other vertex colour in the sky (README G4), so
 ## these are the linear numbers; the inks the names are written in are sRGB and live
 ## next door (SkyLabels.MANSION_COLOUR / MANSION_FIGURE_COLOUR).
 const EQUATOR_WIDTH := 0.26
@@ -97,7 +97,7 @@ var rig: CameraRig
 ## every time step. The Sun's direction is what lights the Moon.
 var sun: SkySun
 var moon: SkyMoon
-## The seven planets and their trails (S5).
+## The seven planets and their trails.
 var planets: SkyPlanets
 
 var _catalogue: StarCat
@@ -105,7 +105,7 @@ var _labels: SkyLabels
 var _branches: SkyBranches
 var _compass: SkyCompassHud
 var _time_bar: SkyTimeBar
-## The twenty-eight 宿 (S6) and the two layers they are drawn as: the equator and
+## The twenty-eight 宿 and the two layers they are drawn as: the equator and
 ## the tick at each 距星's right ascension. Null until the catalogue is read.
 var _mansions: Mansions
 var _equator: MeshInstance3D
@@ -114,7 +114,7 @@ var _mansion_ticks: MeshInstance3D
 ## 星宿 switch, the counterpart of the 星座 one.
 var _mansion_figures: MeshInstance3D
 var _mansion_figures_shown := true
-var _pan: Dictionary = {}      ## the 奇门 chart of the drawn instant (S7)
+var _pan: Dictionary = {}      ## the 奇门 chart of the drawn instant
 var _liuren: Dictionary = {}   ## the 大六壬 chart of the drawn instant
 var _chart_key := ""
 ## Whether the card has been handed the chart it is drawn from: false again whenever a HUD
@@ -131,9 +131,8 @@ var _dome: MeshInstance3D
 var _world: WorldEnvironment
 var _stars: MeshInstance3D
 var _figures: MeshInstance3D
-var _boundaries: MeshInstance3D
-## The ecliptic and its solar-term ticks (S6), which share the lighting and zoom
-## treatment of the figure/boundary layers.
+## The ecliptic and its solar-term ticks, which share the lighting and zoom
+## treatment of the figure layer.
 var _ecliptic: Array = []
 ## Whether the constellation figures and their Chinese names are drawn: the card's
 ## 星座 switch (`set_layer_switch`). On to begin with - the figures are what makes the
@@ -169,7 +168,7 @@ func build(_host: Node) -> void:
 
 
 func build_hud() -> Control:
-	# The compass dial (S7's 卦/干/支 layers) and the time bar. The dial reads the
+	# The compass dial (the 卦/干/支 layers) and the time bar. The dial reads the
 	# background's own rig and the bar its clock, so both show the
 	# same sky the wallpaper does.
 	var hud := Control.new()
@@ -205,14 +204,6 @@ func build_hud() -> Control:
 	_bodies()
 	_chart()
 	return hud
-
-
-## Where the shell's own switch stands on this card: the time bar's seat in the card's
-## lower left column, under 星座 and 星宿 (2026-10-12 第二十一轮, the user moving the 桌面
-## switch out of the 菜单 and onto the card). Null before the HUD exists - the shell asks
-## right after build_hud().
-func hud_shell_slot() -> Control:
-	return null if _time_bar == null else _time_bar.shell_switch_slot()
 
 
 func hud_size() -> Vector2i:
@@ -315,7 +306,7 @@ func _show_layer_switches() -> void:
 func render_policy() -> int:
 	# Nothing on the sphere moves between time updates: the wallpaper draws when
 	# the clock ticks (_apply_time) or the camera rig moves, and idles in
-	# between (计划 §7). With the clock at rate 1 that is one frame per second,
+	# between (README「性能与静默」). With the clock at rate 1 that is one frame per second,
 	# for a sky that turns 0.0002 deg in it.
 	return Policy.ON_DEMAND
 
@@ -395,30 +386,26 @@ func _build_bodies() -> void:
 	sky_root.add_child(planets)
 
 
-## Everything that comes out of the star catalogue: the stars themselves, the
-## constellation figures, and - only when asked for - the IAU boundaries.
+## Everything that comes out of the star catalogue: the stars themselves and the
+## constellation figures.
 func _build_catalogue() -> void:
 	_catalogue = StarCat.load_default()
 	if _catalogue == null:
 		return
 	star_count = _catalogue.count()
 	_stars = StarField.build(sky_root, _catalogue)
-	var boundaries := opts != null and opts.flag("sky_boundaries", false)
-	var lines := SkyLines.build(sky_root, _catalogue, boundaries)
-	_figures = lines[0]
-	_boundaries = lines[1]
-	# the 88 figures can be left off from the command line as well as from the 菜单.
+	_figures = SkyLines.build(sky_root, _catalogue)
+	# the 88 figures can be left off from the command line as well as from the card.
 	# The 宿's own figures are drawn either way, so a shot that has to show them wants
-	# the blue out of the way (the same reason --sky-boundaries exists).
+	# the blue out of the way.
 	_figures_shown = opts == null or opts.flag("sky_figures", true)
 	_figures.visible = _figures_shown
 	# and so can the 星宿 layer (the card's other switch), whose own ribbons are built
 	# further down: read here so that the labels, which are built before them, are told
 	# the state the card will show. A shot of the 星宿-off sky is the reason it exists.
 	_mansion_figures_shown = opts == null or opts.flag("sky_mansions", true)
-	print("XuanDesk: sky: %d stars, %d figure segments, %d boundary segments"
-			% [star_count, _ribs(_figures), 0 if _boundaries == null \
-					else _ribs(_boundaries)])
+	print("XuanDesk: sky: %d stars, %d figure segments"
+			% [star_count, _ribs(_figures)])
 
 
 ## How many ribbon quads a layer's mesh holds, one per segment.
@@ -427,7 +414,7 @@ static func _ribs(layer: MeshInstance3D) -> int:
 
 
 ## The ecliptic: the Sun's own circle on the sphere, with a tick at each of the
-## twenty-four solar terms (计划 §6.5 S6, 2026-10-10) and all twenty-four named on it
+## twenty-four solar terms (README「星点、记号与取舍」, 2026-10-10) and all twenty-four named on it
 ## (2026-10-14 用户: "二十四节气都显出"). Static geometry in the catalogue frame like
 ## everything else the sphere carries, but its divisions are λ measured from the equinox
 ## of the sky's own instant, so it is built once the clock has been set - and it is the
@@ -440,7 +427,7 @@ func _build_ecliptic() -> void:
 		_labels.set_terms(Ecliptic.term_points(jd))
 
 
-## The twenty-eight 宿 (S6): the equatorial divisions, drawn on the equator they are
+## The twenty-eight 宿: the equatorial divisions, drawn on the equator they are
 ## measured along - a thin circle, a tick at each 距星's right ascension where one 宿
 ## hands over to the next, and the 宿's name at the middle of its own span. Static
 ## geometry in the catalogue frame like the ecliptic, and like the ecliptic the names
@@ -505,8 +492,8 @@ func _build_mansion_figures() -> void:
 			MANSION_FIGURE_COLOUR, "MansionFigures")
 	_mansion_figures.visible = _mansion_figures_shown
 	# the ribbons come with their names: a 宿 is a dozen 星官, and 2 to 10 stars that
-	# are not named read as loose strokes (the 88 have had their names since S2 for the
-	# same reason)
+	# are not named read as loose strokes (the 88 have had their names since the
+	# constellations went in, for the same reason)
 	if _labels != null:
 		_labels.set_mansion_figures(MansionFigures.anchors(_catalogue))
 	var names := []
@@ -521,10 +508,10 @@ func _build_mansion_figures() -> void:
 
 
 ## The layers that carry the night's light and the zoom's scale: the stars and
-## everything drawn as ribbons on the sphere.
+## everything drawn as ribbons on the sphere - the 88 figures, the equator with its
+## 宿度 ticks, the 宿's own 星官 figures and the ecliptic with its term ticks.
 func _marked_layers() -> Array:
-	var layers := [_stars, _figures, _boundaries, _equator, _mansion_ticks,
-			_mansion_figures]
+	var layers := [_stars, _figures, _equator, _mansion_ticks, _mansion_figures]
 	layers.append_array(_ecliptic)
 	return layers
 
@@ -574,7 +561,7 @@ func _build_camera() -> void:
 
 # --------------------------------------------------------------- where and when
 
-## The observer, the clock and the camera rig: S3's whole point. The catalogue is
+## The observer, the clock and the camera rig: the clockwork's point. The catalogue is
 ## fixed to J2000, so a change of instant is one basis on SkyRoot.
 func _build_clock() -> void:
 	observer = Observer.new()
@@ -682,7 +669,7 @@ static func _altaz(world: Vector3) -> Vector2:
 
 
 ## The 排盘 the dial and the heaven ring are drawn from: the four pillars for the
-## sky's own instant, and the 奇门 and 大六壬 charts cast on them (计划 §6.5 S7).
+## sky's own instant, and the 奇门 and 大六壬 charts cast on them (README「HUD 罗盘规格（自内向外）」).
 ##
 ## A clock and a chart live on different scales, so the charts are cast when the
 ## 时辰 turns rather than on every tick - and the key carries the term as well,
@@ -693,6 +680,12 @@ func _chart() -> void:
 	if observer == null or clock == null:
 		return
 	var pillars := GanZhi.of(clock.julian_day(), observer.local_datetime(clock.unix()))
+	# the ecliptic's own names follow the same reading: the term in force keeps the
+	# accent and the other twenty-three step back (SkyLabels.set_term_current), said
+	# again here because this is where the sky already works the term out - a press of
+	# 时辰 or a glide can carry the instant across a 节气 without rebuilding anything
+	if _labels != null:
+		_labels.set_term_current(int(pillars["term_index"]))
 	var key := "%s %s" % [pillars["hour"], pillars["term"]]
 	var turned := key != _chart_key
 	if turned:
@@ -779,7 +772,7 @@ func _light() -> void:
 
 
 ## The sky is redrawn only when it actually changes - a new instant, or a camera
-## that moved (计划 §7) - and the names are re-projected with it.
+## that moved (README「性能与静默」) - and the names are re-projected with it.
 func _on_view_changed() -> void:
 	if _labels != null:
 		_labels.refresh()

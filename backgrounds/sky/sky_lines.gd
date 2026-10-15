@@ -1,35 +1,31 @@
-## Constellation figures and IAU boundaries, drawn as thin ribbons on the sphere.
+## Constellation figures, drawn as thin ribbons on the sphere.
 ##
 ## A segment becomes one quad laid in the plane tangent to the sphere at its
 ## midpoint, so from the centre of the sphere - where the camera always sits - it
 ## reads as a hairline without any screen-space trickery, and the whole layer is
 ## static geometry that turns with SkyRoot.
 ##
-## Figures come from Constellations (self-authored, 计划 §6.3); boundaries come
-## from the IAU/Delporte data in data/bound_20.dat (see data/SOURCES.md) and are
-## only built when the caller asks for them (计划 §6.4: they are off by default).
+## Figures come from Constellations (self-authored, README「数据源与许可」). The IAU boundary
+## layer this file used to build beside them, its `--sky-boundaries` switch and the
+## Delporte/B1875 corner data behind it are gone (2026-10-15 用户: "constbnd 是干嘛的,没用
+## 就删了"): it was off by default and drew a fence the user had already said they did not
+## want (README: 用户要的是星座本身,不是边界). The ribbon builder itself stays - the
+## ecliptic, the 宿度 ticks and the planets' trails are all built with it.
 class_name SkyLines
 extends RefCounted
 
 const SHADER := "res://backgrounds/sky/shaders/line.gdshader"
-const BOUNDARY_CORNERS := "res://backgrounds/sky/data/constbnd.dat"
 
 ## Just inside the stars, so the ribbon never fights them for depth.
 const RADIUS := 476.0
 const FIGURE_WIDTH := 0.42   ## world units at RADIUS, ~1.1 px at 2560x1440
-const BOUNDARY_WIDTH := 0.26
 ## Linear colours, kept low: these are additive, and anything brighter blooms into
 ## the stars instead of sitting under them.
 const FIGURE_COLOUR := Color(0.030, 0.055, 0.095)
-const BOUNDARY_COLOUR := Color(0.010, 0.016, 0.028)
 
 
-## Adds the figure layer under `parent` (the SkyRoot) and returns it leading a
-## two-entry array whose second entry is the IAU boundary layer, or null when
-## `boundaries` is false. The boundaries are the dimmest thing the sky draws and
-## they read as a fence over the stars, so they are off unless asked for
-## (`--sky-boundaries=1`, 计划 §6.4).
-static func build(parent: Node3D, catalogue: StarCat, boundaries := true) -> Array:
+## Adds the figure layer under `parent` (the SkyRoot) and returns it.
+static func build(parent: Node3D, catalogue: StarCat) -> MeshInstance3D:
 	var vertices := PackedVector3Array()
 	for abbrev in Constellations.abbreviations():
 		for seg in Constellations.figure(catalogue, abbrev):
@@ -38,17 +34,12 @@ static func build(parent: Node3D, catalogue: StarCat, boundaries := true) -> Arr
 					FIGURE_WIDTH)
 	var figures := _mesh(vertices, FIGURE_COLOUR, "Figures")
 	parent.add_child(figures)
-
-	if not boundaries:
-		return [figures, null]
-	var layer := polyline_layer(parent, _boundary_loops(), BOUNDARY_WIDTH,
-			BOUNDARY_COLOUR, "Boundaries")
-	return [figures, layer]
+	return figures
 
 
 ## Builds a layer of ribbon polylines under `parent` and returns it: every
 ## consecutive pair in every line becomes one quad. Shared with the ecliptic
-## (S6), which is a great circle plus its solar-term ticks.
+## (a great circle plus its solar-term ticks).
 static func polyline_layer(parent: Node3D, lines: Array, width: float, colour: Color,
 		node_name: String) -> MeshInstance3D:
 	var vertices := PackedVector3Array()
@@ -135,55 +126,3 @@ static func _mesh(vertices: PackedVector3Array, colour: Color,
 	material.set_shader_parameter("sphere_radius", RADIUS)
 	instance.material_override = material
 	return instance
-
-
-# ------------------------------------------------------------------ data
-
-## The IAU boundaries, one closed polyline per constellation.
-##
-## constbnd.dat lists each constellation's boundary corners in order - its first
-## entry is that constellation's origin, the rest carry the neighbouring
-## constellation - referred to B1875, so they are precessed to J2000 here. The
-## J2000 file (bound_20.dat) holds the same corners sorted by right ascension,
-## which is neither the order they connect in nor, once precession has moved them
-## off the 1930 constant-RA/Dec grid, recoverable from geometry; it is kept only
-## to check the precession against.
-static func _boundary_loops() -> Array:
-	var text := FileAccess.get_file_as_string(BOUNDARY_CORNERS)
-	if text.is_empty():
-		push_warning("SkyLines: boundary corners missing at %s" % BOUNDARY_CORNERS)
-		return []
-	var per := {}
-	var order := []
-	for line in text.split("\n"):
-		var parts := line.split(" ", false)
-		if parts.size() < 3:
-			continue
-		if not per.has(parts[2]):
-			per[parts[2]] = []
-			order.append(parts[2])
-		# this file gives right ascension in hours
-		per[parts[2]].append(Precession.direction(Precession.B1875, Precession.J2000,
-				float(parts[0]) * 15.0, float(parts[1])))
-	var out := []
-	for abbrev in order:
-		var loop: Array = per[abbrev]
-		if loop.size() < 3:
-			continue
-		out.append(_densify(loop))
-	return out
-
-
-## Straight lines between corners let a long arc sag inside the sphere, so each
-## leg is walked along its great circle in steps no larger than a degree - and
-## the loop is closed on the way out.
-static func _densify(loop: Array) -> Array:
-	var out := []
-	for i in loop.size():
-		var a: Vector3 = loop[i]
-		var b: Vector3 = loop[(i + 1) % loop.size()]
-		var steps := maxi(1, ceili(rad_to_deg(a.angle_to(b))))
-		for k in steps:
-			out.append(a.slerp(b, float(k) / float(steps)))
-	out.append(loop[0])
-	return out

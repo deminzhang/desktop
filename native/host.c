@@ -3,7 +3,9 @@
  * Responsibilities
  *   1. Parent the wallpaper window into the desktop WorkerW layer so the 3D
  *      scene becomes the real wallpaper (rendered behind the desktop icons).
- *   2. Keep the HUD window topmost, tool-windowed and non-activating.
+ *   2. Keep the HUD window topmost, tool-windowed and non-activating - and on the
+ *      screen or off it, which is the client's 面板 switch ("hud 0|1"), the same
+ *      way the wallpaper's own visibility is the client's 桌面 switch.
  *   3. Sample CPU / RAM / GPU / network and stream newline-delimited JSON over a
  *      loopback socket the Godot client listens on.
  *   4. Watch global hotkeys (Ctrl+Alt+H / T / Q) and forward them as events.
@@ -140,6 +142,12 @@ static int g_wall_shown = 1;
  * because a respawned host has to be told again (the client re-sends it with the
  * wall/screen pair, main.gd _on_host_online). */
 static int g_hud_locked = 0;
+
+/* The client's 面板 switch (2026-10-15): whether the HUD window is on the screen at
+ * all - the 罗盘 and the status readings in the corner, which is what the tray's
+ * 面板 row turns over. Kept here for the same two reasons as 穿透: the window is
+ * found by title on every pass, and a respawned host starts out showing it. */
+static int g_hud_shown = 1;
 
 /* The monitors the client can put the wallpaper on (2026-10-10). Index 0 is the
  * primary whatever order the system enumerates in; the client shows this list in
@@ -500,10 +508,15 @@ static void apply_one_overlay(const char *title, HWND *slot, int *shown) {
 				IsWindowVisible(*slot));
 	}
 	if (!*shown) {
-		/* Godot can create the subwindow without ever raising WS_VISIBLE */
-		ShowWindow(*slot, SW_SHOWNOACTIVATE);
+		/* Godot can create the subwindow without ever raising WS_VISIBLE - and the
+		   client may already have asked for the panel to be hidden, since "hud 0"
+		   can arrive before this process has found the window. So the first pass
+		   adopts the window and every pass after it leaves the showing to the
+		   SetWindowPos below, which carries g_hud_shown the way fit_into_worker
+		   carries g_wall_shown. */
 		*shown = 1;
-		logf_("overlay shown, visible=%d", IsWindowVisible(*slot));
+		logf_("overlay window %p adopted (%s)", (void *)*slot,
+				g_hud_shown ? "shown" : "hidden");
 	}
 	LONG_PTR ex = GetWindowLongPtrA(*slot, GWL_EXSTYLE);
 	LONG_PTR want = ex | WS_EX_TOPMOST | WS_EX_TOOLWINDOW;
@@ -526,7 +539,8 @@ static void apply_one_overlay(const char *title, HWND *slot, int *shown) {
 		logf_("overlay exstyle %llx -> %llx", (unsigned long long)ex, (unsigned long long)want);
 	}
 	SetWindowPos(*slot, HWND_TOPMOST, 0, 0, 0, 0,
-			SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+			SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+					| (g_hud_shown ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
 }
 
 static void apply_overlay(void) {
@@ -734,6 +748,7 @@ static void poll_hotkeys(void) {
 #define CMD_QUIT 1
 #define CMD_PASSTHROUGH 2
 #define CMD_DESKTOP 3
+#define CMD_PANEL 4
 #define CMD_BG_BASE 100            /* + index: a 换桌面 row */
 #define CMD_SCREEN_BASE 200        /* + index: a 显示器 row */
 
@@ -751,11 +766,15 @@ static tray_item g_tray_bg[TRAY_MAX_ITEMS];
 static int g_tray_bg_count = 0;
 static tray_item g_tray_screens[TRAY_MAX_ITEMS];
 static int g_tray_screen_count = 0;
-/* The two rows only the client can decide: whether the 桌面 row exists at all (a
- * background whose own HUD carries that switch gets no row here - one switch, one
- * place) and whether 穿透 is locked. The 桌面 row's own tick is g_wall_shown,
- * which this process already keeps. */
+/* The three rows only the client can decide: whether the 桌面 row exists at all (a
+ * run that is not wearing the desktop layer has nothing to show or hide), whether the
+ * 面板 row exists at all (a run without a HUD window has no panel to show or hide),
+ * and whether 穿透 is locked. The 桌面 row is that switch's only seat since
+ * 2026-10-15 (the card's own chip was removed at the user's request). Its tick is
+ * g_wall_shown and the 面板 row's is g_hud_shown, both of which this process already
+ * keeps. */
 static int g_tray_desk_row = 0;
+static int g_tray_panel_row = 0;
 static int g_tray_locked = 0;
 
 
@@ -864,6 +883,9 @@ static void tray_command(int cmd) {
 	} else if (cmd == CMD_DESKTOP) {
 		logf_("tray: desktop");
 		push_event("toggle_desktop");
+	} else if (cmd == CMD_PANEL) {
+		logf_("tray: panel");
+		push_event("toggle_panel");
 	} else if (cmd >= CMD_SCREEN_BASE) {
 		int i = cmd - CMD_SCREEN_BASE;
 		if (i >= g_tray_screen_count) return;
@@ -913,6 +935,10 @@ static void tray_show_menu(void) {
 	if (g_tray_desk_row) {
 		AppendMenuW(menu, MF_STRING | (g_wall_shown ? MF_CHECKED : 0), CMD_DESKTOP,
 				L"桌面");
+	}
+	if (g_tray_panel_row) {
+		AppendMenuW(menu, MF_STRING | (g_hud_shown ? MF_CHECKED : 0), CMD_PANEL,
+				L"面板");
 	}
 	AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
 	AppendMenuW(menu, MF_STRING, CMD_QUIT, L"退出");
@@ -1059,10 +1085,12 @@ static int sock_send(const char *buf, int len) {
  *   wall 0|1                        show/hide the 3D desktop
  *   screen <n>                      put the 3D desktop on monitor n
  *   lock 0|1                        whether the HUD passes the mouse through (穿透)
+ *   hud 0|1                         show/hide the HUD window (the 面板 switch)
  *   menu reset                      forget the tray model; the rows below refill it
  *   menu bg <i> <cur> <id> <label>  a 换桌面 row
  *   menu screen <i> <cur> <label>   a 显示器 row (only drawn when there are 2+)
  *   menu desk 0|1                   whether the 桌面 row exists at all
+ *   menu panel 0|1                  whether the 面板 row exists at all
  *   menu locked 0|1                 whether 穿透 is locked (the row's tick)
  */
 static char g_cmd_buf[4096];
@@ -1090,6 +1118,17 @@ static void handle_command(const char *line) {
 			logf_("hud mouse passthrough %s by client request", locked ? "on" : "off");
 		}
 		apply_overlay();
+	} else if (!strncmp(line, "hud ", 4)) {
+		/* The client's 面板 switch: the HUD window leaves the screen and comes back
+		   (the 罗盘 and the status readings with it). The window is this process's to
+		   show and hide like the wallpaper is - it is the one that owns the HUD's
+		   window styles - and the tray's 面板 row reads the flag back. */
+		int shown = line[4] != '0';
+		if (shown != g_hud_shown) {
+			g_hud_shown = shown;
+			logf_("panel %s by client request", shown ? "shown" : "hidden");
+		}
+		apply_overlay();
 	} else if (!strncmp(line, "screen ", 7)) {
 		/* Which monitor the 3D desktop is on (2026-10-10). The list is the one
 		   enumerated at startup and refreshed by housekeeping, so an index the
@@ -1114,6 +1153,8 @@ static void handle_command(const char *line) {
 			tray_set_item(rest + 7, 0, g_tray_screens, &g_tray_screen_count);
 		} else if (!strncmp(rest, "desk ", 5)) {
 			g_tray_desk_row = atoi(rest + 5) != 0;
+		} else if (!strncmp(rest, "panel ", 6)) {
+			g_tray_panel_row = atoi(rest + 6) != 0;
 		} else if (!strncmp(rest, "locked ", 7)) {
 			g_tray_locked = atoi(rest + 7) != 0;
 		}

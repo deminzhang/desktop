@@ -1,18 +1,18 @@
-## Where the observer looks from, inside the star sphere (计划 §6.5 S3).
+## Where the observer looks from, inside the star sphere (README「天文算法（全部本地计算，无网络）」).
 ##
 ## Azimuth is degrees from north towards east and altitude degrees above the
-## horizon, because those are the two readings the compass HUD (S7) carries: the
+## horizon, because those are the two readings the compass HUD carries: the
 ## view arc outside its card is drawn from the azimuth, and
 ## face_cardinal("east") has to leave the view at azimuth 90 for that arc to be
 ## telling the truth. The rig owns the camera's basis and field of view; nothing
 ## else in the sky touches them.
 ##
-## Input arrives through feed(). S3 wires it to the wallpaper viewport, which only
+## Input arrives through feed(). The clockwork wires it to the wallpaper viewport, which only
 ## receives anything in a windowed dev run (the wallpaper is behind the desktop
-## icons by design); S7 forwards the HUD's drag, wheel and cardinal buttons here.
+## icons by design); the compass HUD forwards its drag, wheel and cardinal buttons here.
 ## Any accepted event stops the idle sweep.
 ##
-## The discrete turns - S7's cardinal buttons, its left/right nudges and its
+## The discrete turns - the compass HUD's cardinal buttons, its left/right nudges and its
 ## zenith button - slew rather than cut: the rig keeps the bearing it is heading
 ## for in an aim beside the view, and advance() eases the view towards it. face()
 ## is the other, unanimated path, for anything that must land under the observer
@@ -97,7 +97,7 @@ const CARDINALS := {
 ## pixels either side of the bar.
 ##
 ## What the field costs is measured rather than chosen (`--sky-fov`/`--sky-view` in
-## README「投影」): the horizon's own arc deepens 272 -> 414 px and the sky is drawn 15.00 px
+## README「星点、记号与取舍」): the horizon's own arc deepens 272 -> 414 px and the sky is drawn 15.00 px
 ## per degree instead of 18.00, while the share of the frame the ground takes is 16 per cent
 ## against the 13.77 the narrower window left. Every other way of getting the zenith onto
 ## the frame costs more: a narrower field takes the horizon itself off the bottom (72 deg of
@@ -109,10 +109,10 @@ const CARDINALS := {
 ## about the pole. The horizon is the one line the fisheye bends (it is not through the
 ## pole): at this field it comes out as the arc 414 px deep that 用户 2026-10-14 asked about
 ## ("地平线是弯的,能不能拉成直的"); the whole of that argument, with the numbers of every
-## way out of it, is in backgrounds/sky/projection_probe.gd and README「投影」.
+## way out of it, is in backgrounds/sky/projection_probe.gd and README「星点、记号与取舍」.
 const OPENING_ALTITUDE := 42.5
 ## The bottom of the frame the desktop does not show: the taskbar. Read off the usable area
-## on this machine - 0,0,2560x1392 of the 0,0,2560x1440 frame (计划 A45) - and only ever
+## on this machine - 0,0,2560x1392 of the 0,0,2560x1440 frame (README「星点、记号与取舍」) - and only ever
 ## used to say what the ground under the horizon has to clear (the probe asserts it against
 ## the wallpaper's own 1440; nothing in the projection reads it).
 const TASKBAR := 48.0

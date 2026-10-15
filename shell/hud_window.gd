@@ -157,7 +157,7 @@ func _input(event: InputEvent) -> void:
 ## Whether a point falls on a control a background put in its HUD that takes the
 ## mouse itself - a button, or the dial if it ever becomes draggable. Those keep
 ## their presses; the rest of the content stays the window's drag handle, so a
-## background can have both (计划 §6.5 S7).
+## background can have both (README「HUD 罗盘规格（自内向外）」).
 func _over_content_control(point: Vector2) -> bool:
 	return _content != null and _control_at(_content, point)
 

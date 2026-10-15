@@ -1,4 +1,4 @@
-## The 时家奇门 chart the dial draws (计划 §6.5 S7): the 拆补 局数 of the 节气 in
+## The 时家奇门 chart the dial draws (README「HUD 罗盘规格（自内向外）」): the 拆补 局数 of the 节气 in
 ## force plus the 三元 the day pillar sits in, then 排盘 in the one mode the dial
 ## ever asks for - 时家 + 拆补 + 转盘 + 中宫寄坤 + 阴阳皆顺.
 ##

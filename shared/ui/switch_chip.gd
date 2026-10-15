@@ -1,8 +1,7 @@
 ## The HUD's switch: a name with a knob at the end of it, thrown to one side or the
-## other. Shared for the same reason the font is - the shell and a background's HUD
-## both put switches on the same card (2026-10-12 第二十一轮: 用户把 星座/星宿 从菜单搬到
-## 罗盘左下角、又把 桌面 显隐开关也搬下来与它们排成一列), and two hand-drawn switches
-## sitting in one column would show every difference between them.
+## other. Shared for the same reason the font is - a background's HUD puts a pair of
+## them on one card (2026-10-12 第二十一轮: 用户把 星座/星宿 从菜单搬到罗盘左下角), and two
+## hand-drawn switches sitting in one column would show every difference between them.
 ##
 ## The track is a **pill** rather than the 5 px corner the card's buttons wear, because
 ## that is what tells a switch from a button at a glance, and the knob is a ring while

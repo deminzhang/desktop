@@ -17,8 +17,8 @@
 ##
 ## A background may read further switches from the same line (shell/background.gd
 ## injects this object); the sky's are `--sky-time=<unix|ISO>`, `--sky-rate=<x>`,
-## `--sky-view=<azimuth>,<altitude>`, `--sky-fov=<deg>`, `--sky-figures=0|1`,
-## `--sky-boundaries=0|1` and `--sky-map=fisheye|lens|pan|cylinder` (which of the
+## `--sky-view=<azimuth>,<altitude>`, `--sky-fov=<deg>`, `--sky-figures=0|1`
+## and `--sky-map=fisheye|lens|pan|cylinder` (which of the
 ## four projections to the frame to draw with, `fisheye` by default: the azimuthal
 ## equidistant about the view axis - a degree of sky is a degree of pixel in every
 ## direction radially, so a turn of the view is a rigid rotation of the picture and

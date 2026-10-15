@@ -1,4 +1,4 @@
-## The Sun: where the sky's daylight comes from (计划 §6.5 S4).
+## The Sun: where the sky's daylight comes from (README「背景二：星野（3D 星空）」).
 ##
 ## One additive quad hung on SkyRoot, painted by shaders/sun.gdshader with the
 ## disc at its true apparent size and the glow around it, and placed again -

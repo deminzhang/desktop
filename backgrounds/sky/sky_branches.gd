@@ -1,4 +1,4 @@
-## The two rings of branches the sky is read against (计划 §6.5 S7): the twelve
+## The two rings of branches the sky is read against (README「HUD 罗盘规格（自内向外）」): the twelve
 ## 地支 on the ground below the horizon - the compass rose, 子 due north - and the
 ## 大六壬 heaven plate laid directly above them, whose 天盘支 turns with the 时辰
 ## while the ground stands still.

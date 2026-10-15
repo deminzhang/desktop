@@ -1,4 +1,4 @@
-## The planets (计划 §6.5 S5).
+## The planets (README「星点、记号与取舍」).
 ##
 ## Heliocentric where the orbits are, geocentric where the sky is read: eight rows
 ## of JPL's approximate Keplerian elements - Mercury round to Neptune, the third of
@@ -59,13 +59,13 @@ const FIVE_STARS := ["水星", "金星", "火星", "木星", "土星"]
 ##   天王星        81"        1018"            50"
 ##   海王星        59"         323"            10"
 ##
-## So 计划 §8's A6 - every planet inside 5 arcminutes over 1800-2050 - held for the
+## So README「验证」 - every planet inside 5 arcminutes over 1800-2050 - held for the
 ## five inner ones and was missed by the great inequality itself: Jupiter and Saturn
 ## swing by degrees over the centuries and no straight-rate fit follows them (the
 ## four cosine terms follow the average of that swing, not this window's part of it).
 ##
 ## Those two rows are therefore not read from this table any more (2026-10-10):
-## VSOP_ROWS below hands them to Vsop87, whose series the same A6 measurement puts
+## VSOP_ROWS below hands them to Vsop87, whose series the README「验证」 check puts
 ## inside 3" over the same twenty dates. The 木星/土星 rows are kept here anyway:
 ## they are the fit the other five are compared against, and the cutover should not
 ## look like the planets were never on one table.

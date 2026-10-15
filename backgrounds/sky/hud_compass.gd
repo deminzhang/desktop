@@ -1,10 +1,10 @@
-## The compass dial of the sky HUD (计划 §6.4, §6.5 S7): the horizon drawn as the
+## The compass dial of the sky HUD (README「HUD 罗盘规格（自内向外）」): the horizon drawn as the
 ## card the sky is seen against, with a live 奇门 chart and a live 大六壬 chart
 ## laid out on it.
 ##
 ## The card stands still, 南 at the top and 北 at the bottom - the 上南下北 a 罗盘
 ## is read at (2026-10-10 第十五轮; it used to turn under a fixed index at the top
-## that read the view's bearing, 计划 A12's dial). What says where the camera looks
+## that read the view's bearing). What says where the camera looks
 ## is now an **arc outside the rim** centred on the view's own bearing, and the
 ## four **direction triangles** on the card's own axes are the controls that aim
 ## it: they are the 北/东/南/西 chip row that used to stand under the dial, moved
@@ -172,7 +172,7 @@ const HAND_STEM := 112.0
 const TWITCH_SEC := 0.35
 const TWITCH_PX := 3.0
 const TWITCH_HZ := 5.0
-## 换字飞转 (2026-10-13, 计划 §6.5 换字飞转): when a 时辰 turns the chart over, the
+## 换字飞转 (2026-10-13, README「HUD 罗盘规格（自内向外）」): when a 时辰 turns the chart over, the
 ## characters that stand somewhere else go to it - **同心转** round the card while it is
 ## the next slot or two, **直线飞** straight across with a small rise when it is further,
 ## and a character the new chart has no name for (or has one the old chart did not) is
@@ -223,15 +223,27 @@ const C_DUTY := Color(1.00, 0.84, 0.45, 0.95)   ## 金: 值符星 / 值使门 / 
 ## It is the card's red - the one the 北 triangle already writes with - rather than a
 ## second red invented beside it.
 const C_GUIDE := Color(0.95, 0.38, 0.34, 0.95)
-## 驿马: the one mark on the card that is a *place*, not a name - an orange-brass of
-## its own, warm enough to read as a travelling mark and clear of the duty gold.
-const C_HORSE := Color(0.98, 0.62, 0.30, 0.95)
+## 驿马: the one mark on the card that is a *place*, not a name - and it is written in
+## the ink of the branch it rides, so the four the 三合 can send it to are four colours
+## on the one ring: 寅木青, 申金白, 巳火赤, 亥水玄 (用户 2026-10-15: "申寅亥巳，四驿马
+## 木、金、火、水 配以青、白、赤、玄 四种色"). The white and the red are the card's own
+## two (西's own white, the 贵人's red) rather than inks invented beside them; 玄 - the
+## dark of 水 - is taken as the deep blue-violet a mark has to wear to stand off a night
+## dome at all, which is also what keeps it clear of the 青 of 寅 beside it. QiMen.HORSE
+## sends the chart to these four branches and no others, so the table is total over what
+## the dial can be told.
+const HORSE_INK := {
+	"寅": Color(0.45, 0.95, 0.70, 0.95),   # 木 青
+	"申": Color(0.95, 0.97, 1.00, 0.95),   # 金 白
+	"巳": Color(0.95, 0.38, 0.34, 0.95),   # 火 赤
+	"亥": Color(0.52, 0.44, 0.95, 0.95),   # 水 玄
+}
 ## The second hand: a pale needle of the instrument's own rather than a mark of a
 ## chart, so it stays out of the ring colours and the cyan of the index. The stem
 ## is the same ink at a low alpha - it crosses the rings, the tip does not.
 const C_HAND := Color(0.80, 0.94, 1.00, 0.80)
 const C_HAND_STEM := Color(0.80, 0.94, 1.00, 0.26)
-## The four cardinal points, drawn as triangles outside the rim (计划 §6.4) - since
+## The four cardinal points, drawn as triangles outside the rim (README「HUD 罗盘规格（自内向外）」) - since
 ## 2026-10-10 第十五轮 they are the card's own direction buttons, one triangle on
 ## each axis of the card. 东 淡绿, 北 红, 西 白 as asked; 南 was left uncoloured in
 ## the brief, so it keeps the card's own accent rather than inventing a fourth
@@ -837,7 +849,7 @@ func _draw_entry(entry: Dictionary, now: Dictionary) -> void:
 				var decay := 1.0 - _twitch / TWITCH_SEC
 				shiver = Vector2(-dir.y, dir.x) \
 						* sin(TAU * TWITCH_HZ * _twitch) * TWITCH_PX * decay
-			_upright_label(at + shiver, "马", 12, C_HORSE, alpha)
+			_upright_label(at + shiver, "马", 12, payload["ink"], alpha)
 
 
 ## Where a plate entry is drawn **right now**: its own place while the card stands, and
@@ -914,7 +926,8 @@ func _palace_block(index: int) -> Array:
 ## 亥, on the 神盘's own radius (those four branches fall between the eight palace slots,
 ## so it never lands on a ring label; it is the one mark that says where the chart is
 ## travelling rather than what stands where, and it shivers sideways for TWITCH_SEC on
-## every beat, `_draw_entry`).
+## every beat, `_draw_entry`). Its ink is the branch's own four 五行 colours (`HORSE_INK`),
+## which rides in the payload because the mark is the same one from chart to chart.
 ## The 卦 ring is not here - a trigram never moves.
 func _build_plate() -> Array:
 	var plate: Array = []
@@ -957,7 +970,10 @@ func _build_plate() -> Array:
 		plate.append({
 			"key": "horse", "cell": 30.0, "a": a, "r": R_HORSE, "off": Vector2.ZERO,
 			"at": _place(deg_to_rad(a), R_HORSE, Vector2.ZERO),
-			"payload": {"kind": "horse"},
+			# the ink rides in the payload with the mark: the horse of the new chart is
+			# another of the four branches on most turns, so the character keeps flying
+			# to its new place and comes out in the new branch's colour (`HORSE_INK`)
+			"payload": {"kind": "horse", "ink": HORSE_INK[Branches.NAMES[_horse]]},
 		})
 	return plate
 

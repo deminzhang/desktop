@@ -1,6 +1,7 @@
-## The sky HUD's time bar (计划 §3.4, §6.5 S7): the sky's own clock, with the step
-## buttons that move it and the two lines the sky's instant is read off - the 三元九运
-## with the 道历 date under it, and the 排盘 the 时辰 is cast from. The wall clock
+## The sky HUD's time bar (README「HUD 与菜单」/「HUD 罗盘规格（自内向外）」): the sky's own
+## clock, with the step buttons that move it and the two lines the sky's instant is
+## read off - the 三元九运 with the 道历 date under it, and the 排盘 the 时辰 is cast
+## from. The wall clock
 ## itself is on the card: its three hands (SkyCompassHud), which keep the observer's
 ## own time rather than the sky's.
 ##
@@ -39,13 +40,13 @@
 ## the second one's 局 comes over with it in `set_ju()`.
 ##
 ## The card's two lower corners are this strip's too - they hang up into the card's
-## own rectangle, which is why those chips' y is negative. Each corner is a **column of
-## three rows** since 2026-10-12 第二十一轮: 星座 / 星宿 (the sky's own line switches) over
-## the shell's 桌面 switch on the left, and 时辰− / 时辰+ / 现在 on the right. The sky's
-## two switches belong to the sky - the chip says one was thrown (`switch_toggled`) and
-## the sky hands the resulting state back with `set_switch()` - and the third left row
-## is a seat the *shell* fills with a chip of its own (`shell_switch_slot`), so the card
-## carries a switch it knows nothing about.
+## own rectangle, which is why those chips' y is negative. Each corner is a **column**:
+## 星座 / 星宿 (the sky's own two line switches) on the left, 时辰− / 时辰+ / 现在 on the
+## right. Both switches belong to the sky - the chip says one was thrown
+## (`switch_toggled`) and the sky hands the resulting state back with `set_switch()`.
+## The left column's third row and the shell's own 桌面 switch that used to stand in it
+## are gone (2026-10-15 用户: "罗盘 桌面 钮 删除"): the tray's 桌面 row is that switch's
+## one seat again, and this card no longer carries a chip it knows nothing about.
 class_name SkyTimeBar
 extends Control
 
@@ -105,19 +106,20 @@ const CYCLE_LABEL := ">>"
 ## lines hug the card and nothing is left empty above them.
 const CLOCK_BASELINE := 12.0
 const PILLAR_BASELINE := 29.0
-## The card's two lower corners are **two columns of three rows each** (用户 2026-10-12
-## 第二十一轮: "星座与星宿按扭用开关样式,两个上下排列" / "菜单里的桌面显隐开关也转出来,放在星座
-## 星宿开关下,上中下三个排一起,时辰−,时辰+,现在也是上中下排一起,对齐行间距一致贴上"):
+## The card's two lower corners are **two columns** (用户 2026-10-12 第二十一轮: "星座与
+## 星宿按扭用开关样式,两个上下排列" / "…时辰−,时辰+,现在也是上中下排一起,对齐行间距一致贴上"):
 ##
-##   左列 星座 · 星宿 · 桌面(座)        右列 时辰− · 时辰+ · 现在
+##   左列 星座 · 星宿        右列 时辰− · 时辰+ · 现在
 ##
-## All six are 38 x 24 and the three rows of a column **touch** — one pitch, one size,
-## so the two columns read as one strip under the card. The coordinates are in this
+## Every chip is 38 x 24 and the rows of a column **touch** — one pitch, one size, so
+## the two columns read as one strip under the card. The coordinates are in this
 ## strip's frame, which begins one card below (y 300), hence the negative y; the rows
 ## are the window's y 248…272 / 272…296 / 296…320, i.e. the last one hangs 20 px into
 ## the strip, over the readout lines' own rows but clear of their text: the first line
 ## runs to x 248 at its very worst (a 闰月 date) and the second to 240, while the
-## columns stand at x 12…50 and 250…288.
+## columns stand at x 12…50 and 250…288. The left column's own third row is empty since
+## 2026-10-15 (its seat was the shell's 桌面 chip), so 现在 at ROW_BOTTOM is the only
+## chip on that pitch.
 ##
 ## 38 rather than 40 is that worst case: the widest line and a column's edge are then 2
 ## px apart instead of touching.
@@ -163,10 +165,6 @@ signal switch_toggled(id: String, on: bool)
 var clock: TimeCore
 
 var _font: Font
-## The empty seat the shell's own switch goes in: the left column's third row, sized and
-## placed by this bar, filled by the shell (see `_build_controls` and
-## `shell_switch_slot`). Null until `_ready` has built the chips.
-var _shell_slot: Control
 ## The two layer switches, by the sky's own switch id: {"figures": the 星座 chip,
 ## "mansions": the 星宿 chip}, each a SwitchChip. Built with the rest of the chips in
 ## `_ready`, shown the state the sky hands over with `set_switch`.
@@ -281,36 +279,11 @@ func _build_controls() -> void:
 		chip.show_state(bool(_switch_state.get(id, true)))
 		_switches[id] = chip
 
-	# the left column's third row is the **shell's seat** (2026-10-12 第二十一轮): the
-	# shell puts its own 桌面 switch here (Background.hud_shell_slot), so that switch
-	# stands with the card's own two instead of in the menu - and the card does not
-	# know what it is.
-	# The seat itself is inert (MOUSE_FILTER_IGNORE): a child of an IGNORE control still
-	# takes its own presses (measured with .tmp/tests/_seat_probe.gd: IGNORE, PASS and STOP
-	# all let the chip's press through), so nothing is paid for leaving an unfilled seat
-	# out of the hit test - it cannot swallow a drag on the HUD.
-	_shell_slot = Control.new()
-	_shell_slot.name = "ShellSwitch"
-	_shell_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_shell_slot)
-	_shell_slot.position = Vector2(ROW_LEFT, ROW_BOTTOM)
-	_shell_slot.size = ROW_SIZE
-
 	var now := _chip("现在", 12)
 	now.pressed.connect(_now)
 	add_child(now)
 	now.position = Vector2(ROW_RIGHT, ROW_BOTTOM)
 	now.size = ROW_SIZE
-
-
-## The seat the shell's own switch goes in - the left column's third row, under 星座 and
-## 星宿 (用户 2026-10-12 第二十一轮: 菜单里的 桌面 显隐开关也搬到这里,上中下三个排一起). The
-## seat is this card's because the column is: its size, its position and the look around
-## it are the sky's, while the chip in it belongs to the shell (`Background.hud_shell_slot`
-## hands this Control up). Null until `_ready` has run, which is after `build_hud()`
-## returns but before the shell asks for it.
-func shell_switch_slot() -> Control:
-	return _shell_slot
 
 
 ## One layer switch, thrown by the user: `state` is the chip's own new state and `id`

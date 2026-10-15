@@ -1,12 +1,12 @@
 ## VSOP87B for the two planetary rows JPL's approximate elements cannot hold
-## (计划 §8 A6, 2026-10-10).
+## (README「验证」, 2026-10-10).
 ##
 ## The element rows in planets.gd are a straight-rate fit: they follow Mercury
 ## through Neptune to a few arcseconds *except* where the great inequality of
 ## Jupiter and Saturn lives. Measured against JPL Horizons over 1800-2050 the fit
-## misses 木星 by 425" and 土星 by 631" - over the five arcminutes A6 asserts, and
+## misses 木星 by 425" and 土星 by 631" - over the five arcminutes README「验证」 asserts, and
 ## nothing a better fit of the same kind fixes (both element sets were measured,
-## 计划 §2.3 G33).
+## README G33).
 ##
 ## So those two rows come from VSOP87 instead: the Bureau des Longitudes' series,
 ## whose "B" version is heliocentric spherical ecliptic and equinox J2000 - the

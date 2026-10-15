@@ -38,7 +38,7 @@ static func star_brightness(mag: float) -> float:
 
 
 ## B-V colour index -> linear RGB, sRGB conversion included because shader
-## colours are linear (计划 §2.3 G4). Blue-white at B-V 0, orange at 1.85.
+## colours are linear (README G4). Blue-white at B-V 0, orange at 1.85.
 static func star_color(bv: float) -> Color:
 	var kelvin := 4600.0 * (1.0 / (0.92 * bv + 1.7) + 1.0 / (0.92 * bv + 0.62))
 	return _black_body_srgb(kelvin).srgb_to_linear()

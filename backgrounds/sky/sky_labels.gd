@@ -3,12 +3,12 @@
 ## pinned to it - the Moon and the seven planets.
 ##
 ## A Control rather than Label3D nodes: the names keep a constant size on screen
-## whatever the field of view does (S3 zooms), they fade into the horizon like
+## whatever the field of view does (the camera zooms), they fade into the horizon like
 ## everything else, and a name that would collide with one already placed is
 ## dropped instead of stacking.
 ##
 ## The sky is static between time steps, so this projects once; whoever turns the
-## sphere (S3's time control) calls refresh(). The planets are the exception - they
+## sphere (the time control) calls refresh(). The planets are the exception - they
 ## are not pinned to the sphere, so the sky hands them over again on every step.
 class_name SkyLabels
 extends Control
@@ -107,6 +107,17 @@ const DIPPER_STARS := [
 	{"letter": "", "number": 80, "name": "左辅", "god": "洞明", "lift": DIPPER_ATTENDANT_LIFT},
 ]
 const DIPPER_ABBREV := "UMa"
+## The five 五行 stars' own 星占 names, read on the same 星宿 switch the 斗's two sets
+## of names are read on: with the switch off the sky writes the ephemeris layer's own
+## names (水星 金星 火星 木星 土星, the ones `SkyPlanets` carries), and with it on the
+## older ones - 辰星 太白 荧惑 岁星 镇星 - which is the language the rest of that layer
+## speaks (廿八宿, 星官, 节气 and the 斗's 神名). 天王 and 海王 are not 五行 and keep
+## their names either way (用户 2026-10-15: "星宿开模式下五行星用 太白 岁星 辰星 荧惑
+## 镇星名").
+const PLANET_ANCIENT := {
+	"金星": "太白", "木星": "岁星", "水星": "辰星", "火星": "荧惑", "土星": "镇星",
+}
+
 ## One named star of the 斗: a step smaller than the pole star's own name, in the ink
 ## 北极星 is written in - so the eight read as stars where the 宿, 星官 and 节气 names
 ## beside them read as the divisions they are.
@@ -127,6 +138,12 @@ const DIPPER_STAR_COLOUR := Color(0.86, 0.92, 1.00, 0.82)
 const TERM_SIZE := 14
 const TERM_LIFT := 13.0
 const TERM_COLOUR := Color(0.42, 0.88, 1.00, 0.95)
+## The twenty-three terms that are *not* in force are written a shade grayer, so the one
+## the sky is being read at is the one the eye lands on (用户 2026-10-15: "黄道节气,非当前
+## 节气色比当前节气灰一下"). The same ink pulled towards the dome's own grey and a little
+## fainter - the ring still reads as one scale of divisions, with the current one leading
+## it rather than as two scales glued together.
+const TERM_COLOUR_DIM := Color(0.58, 0.78, 0.85, 0.72)
 
 ## The zenith (2026-10-10): the point straight up has no star on it, and it is
 ## where the HUD's 天顶 button aims the view - so the sky hangs a hollow cross on
@@ -185,6 +202,11 @@ var _dipper_names: Array = []
 ## The ecliptic's twenty-four solar terms, handed over by the sky with the ecliptic
 ## they are measured on - Ecliptic draws the ticks, this draws the names.
 var _terms: Array = []
+## Which of `_terms` is in force, or -1 before the sky has said: that one keeps
+## TERM_COLOUR, the other twenty-three take TERM_COLOUR_DIM. The array is in
+## `Ecliptic.TERMS` order, which is the order `GanZhi.term_index` counts in, so the
+## two indices are the same number.
+var _term_current := -1
 ## Whether the 88 constellation names are drawn: the 菜单's 星座 switch, which is
 ## about the constellations alone. The 宿 and the planets stay - they are not
 ## figures, and a switch that took them off with the figures would be lying about
@@ -287,10 +309,11 @@ func set_mansion_figures(entries: Array) -> void:
 ## The card's 星宿 switch, handed over by the sky with the figure layer itself: the
 ## 宿's own names, their ribbons and their 星官 names go together (用户 2026-10-12
 ## 第二十一轮: 28宿名只在星宿开着时显), the 廿四节气 names with them (2026-10-14 用户:
-## "二十四节气…仅星宿开关开时显"), and the 斗's stars change which of their two names
-## they wear (see DIPPER_STARS). The 宿's *scale* - the equator, the 距星 ticks and the
-## ecliptic's own ticks - stays on the sky alone, the same way the 星座 switch leaves
-## the 宿 and the planets (SkyLabels.set_figures).
+## "二十四节气…仅星宿开关开时显"), the 五星 change name with them (PLANET_ANCIENT), and
+## the 斗's stars change which of their two names they wear (see DIPPER_STARS). The
+## 宿's *scale* - the equator, the 距星 ticks and the ecliptic's own ticks - stays on
+## the sky alone - the planets' own marks, places and number do not follow it either,
+## only which of the two names the five of them are written with.
 func set_mansions_shown(on: bool) -> void:
 	_mansions_shown = on
 	refresh()
@@ -301,6 +324,17 @@ func set_mansions_shown(on: bool) -> void:
 ## divisions whose ticks Ecliptic draws.
 func set_terms(entries: Array) -> void:
 	_terms = entries
+	refresh()
+
+
+## Which of the twenty-four terms is in force, handed over with the pillars on every
+## time step the way the bodies are - a 时辰 press or a glide carries the sky across a
+## 节气 in one step, and the mark would otherwise go on saying the old one. The index is
+## `GanZhi.term_index`'s own, which counts in the order `set_terms` was given them in.
+func set_term_current(index: int) -> void:
+	if index == _term_current:
+		return
+	_term_current = index
 	refresh()
 
 
@@ -346,8 +380,15 @@ func _draw() -> void:
 	if _moon != null:
 		_place({"name": MOON_NAME, "direction": _moon}, placed, basis, MOON_SIZE,
 				MOON_COLOUR, _moon_lift())
-	for entry in _planets:
-		_place(entry, placed, basis, PLANET_SIZE, PLANET_COLOUR, PLANET_LIFT)
+	for entry: Dictionary in _planets:
+		# the five 五行 stars wear their 星占 names while the 星宿 switch is on, exactly
+		# as the 斗's stars wear their 神名 (PLANET_ANCIENT); a planet the table has no
+		# row for - 天王, 海王 - keeps the name the sky handed over
+		var name := String(entry["name"])
+		if _mansions_shown:
+			name = String(PLANET_ANCIENT.get(name, name))
+		_place({"name": name, "direction": entry["direction"]}, placed, basis,
+				PLANET_SIZE, PLANET_COLOUR, PLANET_LIFT)
 	# the 宿, their 星官 and the 廿四节气 are the card's 星宿 switch between them: the
 	# names of the divisions and the names of the star groups inside them are the same
 	# layer of reading, and the switch that takes the ribbons takes them. The 宿's name
@@ -355,8 +396,11 @@ func _draw() -> void:
 	# names of the 宿 after both
 	for entry in _mansions if _mansions_shown else []:
 		_place(entry, placed, basis, MANSION_SIZE, MANSION_COLOUR, MANSION_LIFT)
-	for entry in _terms if _mansions_shown else []:
-		_place(entry, placed, basis, TERM_SIZE, TERM_COLOUR, TERM_LIFT)
+	for i in _terms.size() if _mansions_shown else 0:
+		# the term in force in the accent, the other twenty-three grayer (用户
+		# 2026-10-15): the ring says where the sky is, not only that it is divided
+		_place(_terms[i], placed, basis, TERM_SIZE,
+				TERM_COLOUR if i == _term_current else TERM_COLOUR_DIM, TERM_LIFT)
 	# the 星官 names come after the 宿's own scale (a 宿's name is what has to stay
 	# readable) and before the 88, which are the most plentiful layer here and the one
 	# that makes way for both

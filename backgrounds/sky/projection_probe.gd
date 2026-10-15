@@ -1,4 +1,4 @@
-## The sky's map to the frame, measured at the wallpaper's own scale (计划 §6.5
+## The sky's map to the frame, measured at the wallpaper's own scale (README「星点、记号与取舍」,
 ## 天球 → 屏的投影).
 ##
 ## The map has two sides that must agree - shaders/sky_projection.gdshaderinc draws the
@@ -10,7 +10,7 @@
 ##   "$G" --headless --path . --script res://backgrounds/sky/projection_probe.gd
 ##
 ## The exit code is the verdict; every line prints pass or FAIL. The wall is the
-## wallpaper's own 2560x1440 (A14's instrument) under the opening view
+## wallpaper's own 2560x1440 (the instrument README「性能与静默」 measured) under the opening view
 ## (CameraRig.OPENING_ALTITUDE/FOV), with the same panel stood on its end for the
 ## portrait case.
 ##
@@ -175,7 +175,7 @@ func _the_framing(map: Callable, lens: Callable) -> void:
 # ------------------------------------------------------------------- the scale
 
 ## The local scale over the frame, relative to the frame's middle, in the stronger of the
-## two directions it has there: the measure the map was chosen on (计划 §6.5, the table in
+## two directions it has there: the measure the map was chosen on (README「星点、记号与取舍」, the table in
 ## sky_projection.gdshaderinc). The lens swells by sec^2 away from its axis - 6.2x at the
 ## corners of this frame, which is the whole of the 2026-10-10 and the 2026-10-14 complaint
 ## ("当前中心正常，周围被拉伸放大") - against the fisheye's 1.571x, which is sin's own
@@ -538,7 +538,7 @@ func _turn_residual(map: SkyProjection.Map, altitude: float, turn_deg := 10.0) -
 
 ## The picture is *wider* than the camera's own frustum, which is why a body hung off the
 ## sphere's centre carries SkyProjection.keep_visible() rather than trusting the frustum
-## (计划 §6.5「一处要跟着走的东西」, A33/A36): the fisheye lays the *angle* off the axis on
+## (README「星点、记号与取舍」): the fisheye lays the *angle* off the axis on
 ## the frame, 85.3 deg across at the opening against the lens' gnomonic 63.1, so a body at
 ## 63..98 deg off the axis is inside the picture and outside the frustum at once - the
 ## light version of what the world-measured grids (pan, cylinder) do at 89 deg. The day's
