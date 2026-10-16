@@ -4,7 +4,7 @@
 //
 // Painted on real geometry rather than left to a procedural skybox, because a
 // scene whose only content is an Environment background does not present into
-// the wallpaper window once the host has reparented it into the desktop's
+// the wallpaper window once the native side has reparented it into the desktop's
 // WorkerW layer (README V3). The sphere also gives the star field a horizon
 // and the compass something to hang the horizon ring on.
 //

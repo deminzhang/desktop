@@ -3,7 +3,7 @@
 ##   --hud=0|1               create the floating HUD (default 1)
 ##   --background=<id>       background to open with (default: first registered)
 ##   --fps=<n>               frame cap (default 60)
-##   --interval=<ms>         host metric sample period (default 1000)
+##   --interval=<ms>         native side metric sample period (default 1000)
 ##   --no-activate=0|1       HUD window without WS_EX_NOACTIVATE (default 1)
 ##   --shot=<png>            render N frames, save a viewport, quit
 ##   --shot-target=main|hud  which window to capture (default main)
@@ -11,6 +11,9 @@
 ##                           same request the tray's 显示器 row sends
 ##   --shot-frames=<n>       frames to settle before capturing (default 90)
 ##   --exit-after=<seconds>  quit after N seconds
+##   --wall-restart=<n>      how many generations of this run have already restarted
+##                           (the desktop window watch's own cap, shell/main.gd; a
+##                           hand launch has no business passing it)
 ##
 ## Keys are normalised to snake_case, so `--shot-frames` and `--shot_frames`
 ## both read back as `shot_frames`.

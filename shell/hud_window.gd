@@ -2,8 +2,8 @@
 ## transparent OS window.
 ##
 ## Nothing is glued to it any more: the shell's chrome - the 菜单 - lives in the
-## notification area since 2026-10-13 (the tray icon and Win32 popup bin/host.exe
-## owns, see the tray block in native/host.c). That is also what keeps 穿透
+## notification area since 2026-10-13 (the tray icon and Win32 popup the native side
+## owns, see the tray block in native/gdext/xuandesk_native.c). That is also what keeps 穿透
 ## escapable: 穿透 passes every mouse event through this window, and a window that
 ## has passed the mouse through has passed it through everywhere, so nothing drawn
 ## *in* it stays clickable - while a tray icon is not a window of ours at all.
@@ -12,10 +12,10 @@
 ## on Windows that flag only makes the window answer WM_NCHITTEST with
 ## HTTRANSPARENT, which the system forwards to underlying windows *in the same
 ## thread* - so the HUD stopped taking clicks but nothing underneath got them
-## either (measured; see native/host.c apply_one_overlay). The window style
-## Windows honours across processes is the host's business, like its topmost /
-## tool-window / no-activate bits: this class owns the flag and says when it
-## turned over.
+## either (measured; see native/gdext/xuandesk_native.c apply_one_overlay). The window
+## style Windows honours across processes is the native side's business, like its
+## topmost / tool-window / no-activate bits: this class owns the flag and says when
+## it turned over.
 ##
 ## Everything in here is whatever the current background built. Switching a
 ## background replaces the content and resizes this window to match.
@@ -25,7 +25,7 @@
 class_name HudWindow
 extends Window
 
-## The host's own quit hotkey lands on this window (Ctrl+Alt+Q, `_on_host_event`).
+## The native side's quit hotkey lands on this window (Ctrl+Alt+Q, `_on_native_event`).
 ## It is the shell that exits, so this is a request, like the tray's 退出 row.
 signal quit_requested
 ## 穿透 has turned over - through Ctrl+Alt+T or the tray's 穿透 row. This window
@@ -89,7 +89,7 @@ func set_content(content: Control, content_size: Vector2i) -> void:
 
 func attach(client: MetricsClient) -> void:
 	metrics = client
-	client.host_event.connect(_on_host_event)
+	client.native_event.connect(_on_native_event)
 
 
 # --------------------------------------------------------------------- window
@@ -113,9 +113,9 @@ func _default_position() -> Vector2i:
 ## what stays clickable when it is on (2026-10-13) - before that it was the menu
 ## window sitting on this one's corner.
 ##
-## The window style that does the passing is the host's to set (it owns this
+## The window style that does the passing is the native side's to set (it owns this
 ## window's styles and holds the same flag): this only turns the flag over and
-## says so, which is what main.gd sends to the host and what the tray's row shows.
+## says so - what main.gd sends to the native side, and what the tray's row shows.
 func _toggle_lock() -> void:
 	_locked = not _locked
 	passthrough_changed.emit(_locked)
@@ -127,8 +127,8 @@ func is_locked() -> bool:
 	return _locked
 
 
-func _on_host_event(name: String) -> void:
-	print("XuanDesk: host event '", name, "'")
+func _on_native_event(name: String) -> void:
+	print("XuanDesk: native event '", name, "'")
 	# "toggle_desktop" is the shell's (shell/main.gd): the desktop layer is the
 	# wallpaper window's business, not the HUD's, and the shell owns the state of
 	# the two windows. Only the HUD's own two events are answered here.

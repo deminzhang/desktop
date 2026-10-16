@@ -1,5 +1,5 @@
 ## Turns the process's main window into the desktop wallpaper: borderless, no
-## resize, the title bin/host.exe matches on, covering the whole primary monitor.
+## resize, the title the native side matches on, covering the whole primary monitor.
 class_name WallpaperWindow
 extends RefCounted
 

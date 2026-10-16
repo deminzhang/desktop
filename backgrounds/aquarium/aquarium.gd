@@ -42,7 +42,7 @@ func display_name() -> String:
 	return "水族箱"
 
 
-func build(_host: Node) -> void:
+func build(_shell: Node) -> void:
 	_build_environment()
 	_build_lights()
 	_build_sand()

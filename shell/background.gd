@@ -34,9 +34,10 @@ func display_name() -> String:
 	return ""
 
 
-## Builds the whole world as children of this node. May await. `host` is the
-## shell itself, for anything build() cannot get from its own properties.
-func build(_host: Node) -> void:
+## Builds the whole world as children of this node. May await. `_shell` is the shell
+## itself - the parent this node is built into - for anything build() cannot get from
+## its own properties.
+func build(_shell: Node) -> void:
 	pass
 
 

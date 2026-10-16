@@ -1,7 +1,8 @@
 @echo off
 rem Launch XuanDesk: 3D wallpaper plus the floating HUD.
-rem The wallpaper window is parented into the desktop's WorkerW layer by
-rem bin\host.exe, which is why it ends up *behind* the desktop icons.
+rem The wallpaper window is parented into the desktop's WorkerW layer from inside
+rem this process by the GDExtension (xuandesk_native.dll) - there is no helper
+rem process and no socket any more - which is why it ends up *behind* the icons.
 rem
 rem The runtime is the installed Godot editor build (Steam's
 rem godot.windows.opt.tools.64.exe), found below or given as GODOT=<path>.
@@ -15,8 +16,8 @@ if not defined GODOT (
     echo            e.g. set "GODOT=E:\Program Files (x86)\Steam\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe"
     exit /b 1
 )
-if not exist "%~dp0bin\host.exe" (
-    echo [XuanDesk] bin\host.exe missing - run native\build.cmd
+if not exist "%~dp0xuandesk_native.dll" (
+    echo [XuanDesk] xuandesk_native.dll missing - run native\build.cmd
     exit /b 1
 )
 

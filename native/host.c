@@ -140,7 +140,7 @@ static int g_wall_shown = 1;
  * stamped once, because the HUD window is looked up by title on every
  * housekeeping pass - the client can ask before this process has found it - and
  * because a respawned host has to be told again (the client re-sends it with the
- * wall/screen pair, main.gd _on_host_online). */
+ * wall/screen pair, main.gd _on_native_online). */
 static int g_hud_locked = 0;
 
 /* The client's 面板 switch (2026-10-15): whether the HUD window is on the screen at

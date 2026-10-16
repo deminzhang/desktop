@@ -150,7 +150,7 @@ func display_name() -> String:
 	return "星空"
 
 
-func build(_host: Node) -> void:
+func build(_shell: Node) -> void:
 	_choose_map()
 	_build_environment()
 	sky_root = Node3D.new()

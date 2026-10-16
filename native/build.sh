@@ -1,12 +1,21 @@
 #!/usr/bin/env bash
-# Build the XuanDesk native host with mingw-w64 gcc.
-#   -mwindows : GUI subsystem, so Windows never allocates a console window.
-#   -s        : strip.
+# Build the XuanDesk GDExtension (../xuandesk_native.dll), which the engine loads
+# in-process: it owns the WorkerW wallpaper mount, the tray icon, the HUD window
+# styling and the metrics sampler, so the project runs as ONE process - no helper
+# exe and no loopback socket. host.c is the original separate-process
+# implementation, kept as the reference the port was written against.
+#
+#   build.sh          release DLL - no debug surface (no breadcrumb log, no test())
+#   build.sh debug    adds -DXD_DEBUG_LOG: arms _gdext_init.log and the test()
+#                     hook that the gate probes drive
+#   build.sh host     legacy bin/host.exe
+#
+# -shared : a GDExtension is a DLL the engine dlopens, not an exe.
 #
 # Works from WSL bash (/mnt/c/...), msys/git-bash (/c/...) or plain Windows PATH.
 set -euo pipefail
 cd "$(dirname "$0")"
-mkdir -p ../bin
+trap 'rm -f ../tray_res.o' EXIT
 
 find_gcc() {
   if [ -n "${GCC:-}" ]; then echo "$GCC"; return; fi
@@ -46,15 +55,29 @@ fi
 # flags have to be spelled out because --preprocessor replaces the whole command,
 # not just the program.
 if [ "$GCC_DIR" != "." ]; then PATH="$GCC_DIR:$PATH"; fi
-"$WINDRES_BIN" tray.rc -O coff -o tray_res.o \
+"$WINDRES_BIN" tray.rc -O coff -o ../tray_res.o \
     --preprocessor="gcc -E -xc-header -DRC_INVOKED"
 
-# __USE_MINGW_ANSI_STDIO: recent mingw-w64 gcc defaults to its own printf, but an
-# older one (7.x, as shipped in "C:\Program Files\mingw") hands %llu straight to
-# msvcrt, which does not know "ll" - the metric frame's seq/mem/up fields print
-# garbage. Asking for it explicitly is a no-op on the new toolchains.
-"$GCC_BIN" -O2 -s -Wall -Wextra -mwindows -D__USE_MINGW_ANSI_STDIO=1 \
-    -o ../bin/host.exe host.c tray_res.o \
-    -lws2_32 -liphlpapi -luser32 -ladvapi32 -lshell32
-rm -f tray_res.o
-echo "built bin/host.exe with $GCC_BIN"
+if [ "${1:-}" = "host" ]; then
+  # Legacy: the separate-process host the merged build no longer needs.
+  mkdir -p ../bin
+  # -D__USE_MINGW_ANSI_STDIO: %llu on an old mingw's msvcrt prints garbage (T23; see
+  # the DLL link's note).
+  "$GCC_BIN" -O2 -s -Wall -Wextra -mwindows -D__USE_MINGW_ANSI_STDIO=1 \
+      -o ../bin/host.exe host.c ../tray_res.o \
+      -lws2_32 -liphlpapi -luser32 -ladvapi32 -lshell32
+  echo "built bin/host.exe with $GCC_BIN"
+  exit 0
+fi
+
+DBG=""
+if [ "${1:-}" = "debug" ]; then DBG="-DXD_DEBUG_LOG"; fi
+# __USE_MINGW_ANSI_STDIO: an old mingw (7.x, as shipped in "C:\Program Files\mingw")
+# hands %llu straight to the pre-VS2015 msvcrt, which does not know "ll" - the metric
+# frame's seq/mem/up fields print garbage (T23). Asking for it costs ~29 KB (measured
+# on gcc 15.1.0: 85,016 -> 114,023 B before the tray resource) and is what makes the
+# frame correct on any toolchain, so both links here pass it.
+"$GCC_BIN" -O2 -shared -Wall -Wextra -Wl,--export-all-symbols $DBG \
+    -D__USE_MINGW_ANSI_STDIO=1 -o ../xuandesk_native.dll gdext/xuandesk_native.c -I. \
+    -luser32 -lshell32 -ladvapi32 -liphlpapi ../tray_res.o
+echo "built xuandesk_native.dll with $GCC_BIN"

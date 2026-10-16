@@ -1,9 +1,12 @@
 @echo off
-rem Same as run.bat but keeps the console attached so host.exe's output and the
-rem engine's are visible. The engine build is a GUI-subsystem binary, so its own
-rem stdout only reaches the file it is redirected to - use
+rem Same as run.bat but keeps the console attached so the engine's own output is
+rem visible. It is a GUI-subsystem binary, so its stdout only reaches the file it
+rem is redirected to - use
 rem   run_debug.bat --shot=.tmp/shots/x.png > .tmp\tools\run.log 2>&1
-rem when the engine's own lines matter.
+rem when the engine's own lines matter. The native side writes its breadcrumbs to
+rem _gdext_init.log instead, and only when the DLL was built with
+rem   native\build.cmd debug
+rem (a release DLL has no logging and no test() hook at all).
 setlocal
 cd /d "%~dp0"
 
