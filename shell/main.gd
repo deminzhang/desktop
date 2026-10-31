@@ -88,6 +88,9 @@ var _wall_gave_up := false
 ## Set while a restart is being set up, so one already on its way is not asked for twice
 ## - the metric frames keep coming until the process actually goes.
 var _wall_busy := false
+## The last wallpaper-layer state that was written to the log, so the log carries the
+## transitions rather than one line per frame.
+var _wall_state_seen := ""
 
 
 func _ready() -> void:
@@ -193,6 +196,16 @@ func _on_passthrough_changed(locked: bool) -> void:
 ## repeating what was asked for.
 func _on_frame(_data: Dictionary) -> void:
 	_watch_desktop_window()
+	_watch_panel_window()
+	# The one thing worth a line in the log every time it changes: which state the
+	# wallpaper layer is in. A run that loses its window says so here, and the generation
+	# that follows a restart says whether it mounted again - a failure that leaves no
+	# trace in the log is the other half of what this watch exists to stop (2026-10-21:
+	# a night's loss had to be reconstructed from 2610 swap-chain errors and a window
+	# tree dump, because the app itself never mentioned it).
+	if metrics.wall_state != _wall_state_seen:
+		_wall_state_seen = metrics.wall_state
+		print("XuanDesk: wallpaper layer '%s'" % _wall_state_seen)
 	var list := metrics.screens()
 	var key := "%s|%d" % [JSON.stringify(list), metrics.screen()]
 	if key == _screens_seen:
@@ -219,10 +232,19 @@ func _watch_desktop_window() -> void:
 	if _wall_busy or _shot or not _wallpaper or not _desktop_shown:
 		return
 	if metrics.wall_state != "waiting":
-		# mounted, or asked for no desktop: whatever the watch remembered is spent
+		# mounted, or asked for no desktop: the waiting stretch is over, and a later
+		# outage earns its own give-up line.
+		#
+		# What is deliberately *not* forgotten here is the restart count. A healthy mount
+		# is exactly what a restart loop looks like from the inside - restart, mount, lose
+		# the window again - so clearing the count on every good frame makes
+		# WALL_RESTART_MAX unreachable: measured 2026-10-27, four wallpaper changes in
+		# four minutes produced four restarts, every one of them launched with
+		# `--wall-restart=1` and none with a give-up line. The burst limit has to outlive
+		# a good mount and expire by time instead (WALL_RESTART_WINDOW_MS, checked in
+		# _restart_process), which is what lets a loss a day apart restart forever while a
+		# burst still stops.
 		_wall_waiting_since = 0
-		_wall_restarts = 0
-		_wall_restart_since = 0
 		_wall_gave_up = false
 		return
 
@@ -234,6 +256,19 @@ func _watch_desktop_window() -> void:
 	if now - _wall_waiting_since < WALL_LOST_GRACE_MS:
 		return
 	_restart_process()
+
+
+## The shell's half of the panel's watch (2026-11-02). The HUD is not a child of the
+## desktop layer, so the wallpaper watch above has nothing to say about it - but it is a
+## window, and a window can end up outside every monitor just as easily as it can be
+## destroyed. Measured that day: 300×340 at (2692,1520) on a desktop of two 2560×1440
+## screens side by side, alive and `visible` for days, the compass on no screen at all,
+## and not one line in the log to say when it happened. Where the panel is, and what to
+## do about it, is the window's own business (shell/hud_window.gd::keep_on_screen), the
+## same way the wallpaper window's is the native side's.
+func _watch_panel_window() -> void:
+	if hud_window != null:
+		hud_window.keep_on_screen()
 
 
 ## The cure, and the only one there is: a fresh process.
@@ -332,7 +367,8 @@ func _project_dir() -> String:
 ## model it was handed.
 ##
 ## The shape is the same one the old 菜单 panel had: the 换桌面 rows are the registry's
-## order with the live one ticked, 显示器 is drawn only when there is a choice of
+## order with the live one ticked and the not-yet-built ones (五行's four TODO rows)
+## flagged, 显示器 is drawn only when there is a choice of
 ## monitor, 桌面 and 面板 are the two switches over the process's own two windows
 ## (2026-10-15), and 桌面 goes with the desktop layer itself - `--wallpaper=0` makes it a
 ## no-op, so the row goes too. 面板 exists only for a run that has a HUD window to show
@@ -342,8 +378,13 @@ func _push_tray_model() -> void:
 	var ids := Backgrounds.ids()
 	for index in ids.size():
 		var id := String(ids[index])
-		metrics.send_command("menu bg %d %d %s %s" % [index,
-				1 if id == _current else 0, id, Backgrounds.display_name(id)])
+		# <index> <current> <todo> <id> <label>: the todo flag is what the native side
+		# greys the row with (Backgrounds.is_todo) - a row the picker offers, that the
+		# shell cannot build yet.
+		metrics.send_command("menu bg %d %d %d %s %s" % [index,
+				1 if id == _current else 0,
+				1 if Backgrounds.is_todo(id) else 0,
+				id, Backgrounds.display_name(id)])
 	var screens := metrics.screens()
 	for index in screens.size():
 		metrics.send_command("menu screen %d %d %s" % [index,

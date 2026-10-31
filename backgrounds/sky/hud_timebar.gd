@@ -154,6 +154,12 @@ const C_BORDER_HOVER := Color(0.40, 0.85, 0.95, 0.55)
 const C_FILL_ON := Color(0.16, 0.40, 0.48, 0.92)
 const C_ON_BORDER := Color(0.40, 0.85, 0.95, 0.85)
 
+## The state each layer switch comes up in when the sky has not said anything about
+## it yet, keyed by the sky's own switch id. The sky does hand both over from
+## `build_hud()`, so this only covers a bar built without one; it mirrors
+## `SkyBackground`'s own defaults (星座 off, 星宿 on).
+const SWITCH_DEFAULT := {"figures": false, "mansions": true}
+
 ## One of the card's two layer switches has been thrown: `id` is the sky's own
 ## switch id ("figures" / "mansions", the pair `Background` used to hand the 菜单)
 ## and `on` the state it was thrown to. The state is the sky's, not the chip's: what
@@ -274,9 +280,9 @@ func _build_controls() -> void:
 		chip.position = spec["at"]
 		chip.size = ROW_SIZE
 		# the sky's own state, which it may have handed over before this bar was in
-		# the tree (see set_switch); a layer nobody said anything about is on, which
-		# is the sky's own default
-		chip.show_state(bool(_switch_state.get(id, true)))
+		# the tree (see set_switch); a layer nobody said anything about falls back to
+		# the sky's own default for it (SWITCH_DEFAULT)
+		chip.show_state(bool(_switch_state.get(id, SWITCH_DEFAULT.get(id, true))))
 		_switches[id] = chip
 
 	var now := _chip("现在", 12)

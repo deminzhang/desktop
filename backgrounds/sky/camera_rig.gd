@@ -17,6 +17,10 @@
 ## for in an aim beside the view, and advance() eases the view towards it. face()
 ## is the other, unanimated path, for anything that must land under the observer
 ## at once (a dragging pointer, the dev switches).
+##
+## The one motion the rig runs without an end is the **auto-rotate** a held 左转/右转
+## chip starts (2026-11-12, spin()): it walks the bearing at SPIN_AZIMUTH until the next
+## tap on either chip, and it is the only thing that outlasts the press that asked for it.
 class_name CameraRig
 extends Node
 
@@ -40,6 +44,15 @@ const TURN_RATE := 9.0
 ## Both axes inside this many degrees of the aim and the turn is over: snapping
 ## the last fraction of a degree beats creeping after it forever.
 const TURN_SNAP := 0.02
+## The auto-rotate a *held* 左转/右转 chip starts (用户 2026-11-12: 长按可启动自动旋转,
+## 再短点任一停止): degrees of pan per second, in the direction that chip turns. One 山
+## (15 deg, the step a tap walks) every 4 s - the same step, only continuous - so a whole
+## turn of the sky takes 96 s. It shipped at 15 deg/s (a 山 a second) and the user halved
+## it twice the same day ("再慢一半", then "再降一半转速"): the chip is a *nudge*, and the
+## sky answering the finger faster than the eye can place it is what both rounds were
+## about. Deliberately nothing like the idle sweep's 0.30 deg/s: that one is for a
+## wallpaper nobody is looking at, this one is the observer holding a button down.
+const SPIN_AZIMUTH := 3.75
 ## The field the sky's own geometry is built for: star quads and figure ribbons
 ## are drawn in world units, so the sky scales them by fov / BASE_FOV to keep a
 ## point a point and a hairline a hairline at any zoom.
@@ -145,6 +158,11 @@ var _aim_azimuth := 180.0
 var _aim_altitude := OPENING_ALTITUDE
 var _turning := false
 var _dragging := false
+## The auto-rotate: which way it is turning (-1 左, +1 右, 0 = it is not), and how far
+## it has swept since it started, accumulated from the view itself rather than from the
+## rate, so the line printed when it stops is the distance the sky actually covered.
+var _spin := 0
+var _spin_turned := 0.0
 
 
 ## Takes the camera and applies the opening view: the field defaults above are
@@ -173,6 +191,7 @@ func face(azimuth_deg: float, altitude_deg: float) -> void:
 	_aim_altitude = altitude
 	_turning = false
 	stop_sweep()
+	stop_spin()
 	_apply()
 	moved.emit()
 
@@ -186,6 +205,7 @@ func turn_to(azimuth_deg: float, altitude_deg: float) -> void:
 	_aim_azimuth = fposmod(azimuth_deg, 360.0)
 	_aim_altitude = clampf(altitude_deg, ALTITUDE_MIN, ALTITUDE_MAX)
 	stop_sweep()
+	stop_spin()
 	_turning = true
 
 
@@ -224,6 +244,7 @@ func drag(motion: Vector2) -> void:
 func set_fov(degrees: float) -> void:
 	fov = clampf(degrees, FOV_MIN, FOV_MAX)
 	stop_sweep()
+	stop_spin()
 	_apply()
 	moved.emit()
 
@@ -239,8 +260,10 @@ func zoom(notches: float) -> void:
 func start_sweep() -> void:
 	# Idling and turning are both the rig steering itself, and only one of them
 	# may own the view: a sweep left to run under a turn would fight it for the
-	# azimuth. Going idle gives the turn up.
+	# azimuth. Going idle gives the turn up - and the auto-rotate with it, a held
+	# chip's spin being the other thing that steers.
 	_turning = false
+	stop_spin()
 	_sweep_time = 0.0
 	_sweep_azimuth = azimuth
 	_sweep_altitude = altitude
@@ -251,11 +274,65 @@ func stop_sweep() -> void:
 	auto_sweep = false
 
 
-## One step of whatever the rig does on its own - the turn the HUD asked for, or
-## the idle sweep when nothing is aimed at. Split out of _process so a test can
-## wind the sky without a scene running.
+# ---------------------------------------------------------------------- spin
+
+## Starts (or re-aims) the auto-rotate the HUD's held 左转/右转 chip asked for: the view
+## keeps turning at SPIN_AZIMUTH deg/s in that chip's direction until `stop_spin()`, which
+## the next *tap* on either chip is. Any turn in flight is abandoned rather than finished -
+## the spin owns the view from here - and the aim is put back on the view, so the first
+## frame turns from where the view stands instead of closing the gap an abandoned turn had
+## left. Holding the chip that is already spinning changes nothing (a re-aim, not a
+## restart: the sky must not jump under the finger).
+func spin(direction: int) -> void:
+	var wanted := signi(direction)
+	if wanted == 0:
+		stop_spin()
+		return
+	_turning = false
+	stop_sweep()
+	_aim_azimuth = azimuth
+	_aim_altitude = altitude
+	if _spin == wanted:
+		return
+	_spin = wanted
+	_spin_turned = 0.0
+	print("XuanDesk: sky: 自动旋转 %s %.2f°/s" % ["右（顺行）" if wanted > 0 else "左（逆行）",
+			SPIN_AZIMUTH])
+
+
+## Stops the auto-rotate. Every other view change calls this too - a drag, a cardinal, a
+## step, a zoom - so the observer's own hand always wins over the rig's. Silent unless
+## there was a spin to stop, and then it says how far the sky got, which is the one number
+## that says the auto-rotate really ran (README「验证」).
+func stop_spin() -> void:
+	if _spin == 0:
+		return
+	var direction := _spin
+	_spin = 0
+	print("XuanDesk: sky: 自动旋转停（%s，转了 %.1f°）" % ["右" if direction > 0 else "左",
+			absf(_spin_turned)])
+	_spin_turned = 0.0
+
+
+## Whether the rig is turning on its own right now - what the HUD's chips ask before they
+## decide what a tap means (a tap walks one 山, or stops the spin, never both).
+func is_spinning() -> bool:
+	return _spin != 0
+
+
+## Which way the auto-rotate is turning: -1 左, +1 右, 0 = standing.
+func spin_direction() -> int:
+	return _spin
+
+
+## One step of whatever the rig does on its own - the auto-rotate a held chip started,
+## the turn the HUD asked for, or the idle sweep when nothing is aimed at. Split out of
+## _process so a test can wind the sky without a scene running.
 func advance(delta: float) -> void:
 	if camera == null:
+		return
+	if _spin != 0:
+		_step_spin(delta)
 		return
 	if _turning:
 		_step_turn(delta)
@@ -269,6 +346,20 @@ func advance(delta: float) -> void:
 			ALTITUDE_MIN, ALTITUDE_MAX)
 	# The sweep carries the aim with it: a nudge arriving mid-sweep adds to where
 	# the view is now, not to wherever the sweep happened to begin.
+	_aim_azimuth = azimuth
+	_aim_altitude = altitude
+	_apply()
+	moved.emit()
+
+
+## One frame of the auto-rotate: the bearing walks at SPIN_AZIMUTH deg/s and the aim rides
+## with it (the sweep's own rule), so a step arriving out of the spin adds to where the view
+## is now instead of to wherever the spin began. The distance is accumulated from the view,
+## along the shorter way round, because that is what the closing log line reports.
+func _step_spin(delta: float) -> void:
+	var was := azimuth
+	azimuth = fposmod(azimuth + SPIN_AZIMUTH * float(_spin) * delta, 360.0)
+	_spin_turned += _bearing_gap(was, azimuth)
 	_aim_azimuth = azimuth
 	_aim_altitude = altitude
 	_apply()

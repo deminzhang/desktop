@@ -67,6 +67,13 @@ const BAGUA := [["坎", 1, 2], ["艮", 8, 4], ["震", 3, 1], ["巽", 4, 6],
 
 ## How far one 左转/右转 press turns the view: one 山 (15 deg).
 const TURN_STEP := 15.0
+## How long a 左转/右转 chip has to be held before the view starts turning on its own
+## (用户 2026-11-12: 长按可启动自动旋转, 再短点任一停止). The chip itself cannot tell a
+## tap from a hold - Button only says pressed - so this is a clock of our own, ticked in
+## _process, and the hold only turns into the auto-rotate once it has run out. Long
+## enough that an ordinary tap (a press and release inside a couple of frames) can never
+## trip it, short enough that "hold a moment and let go" still reads as one gesture.
+const HOLD_SECONDS := 0.4
 ## The 左转/右转 chips hold one arrow each (↙ U+2199 / ↘ U+2198, 2026-10-10 第十八轮).
 ## 16 px is as large as the glyph can be with the chip still exactly 24 px tall - the
 ## system font is 22 px high at that size - and the chip draws it with a 1 px outline
@@ -326,6 +333,13 @@ var _fly_t := 1.0
 ## Whether any chart has been drawn yet: the first one lands without flying in, there
 ## being no card to fly from.
 var _plate_built := false
+## The 左转/右转 hold (2026-11-12): which chip is down (0 = neither), how long it has
+## been down, and whether this press has already turned into the auto-rotate. A press
+## that never reaches HOLD_SECONDS is the old one-山 step - or, with the view already
+## turning on its own, the tap that stops it.
+var _held_dir := 0
+var _held_for := 0.0
+var _held_long := false
 
 
 # --------------------------------------------------------------------- setup
@@ -358,6 +372,9 @@ func _beat() -> void:
 ## for one frame at the turn of each one, and is otherwise idle: the card is static
 ## in between and the wallpaper behind it is on demand.
 func _process(delta: float) -> void:
+	# the 左转/右转 hold first: it is the one thing here that is about the *mouse* rather
+	# than about the card, and it has to be decided before this frame is drawn
+	_step_hold(delta)
 	var second := int(wall_clock()["second"])
 	if second != _ticked:
 		_ticked = second
@@ -538,13 +555,15 @@ func _build_controls() -> void:
 	# default theme's (31 px tall, whatever the font), which would clamp a 24 x 24 chip
 	# to 24 x 31 and never let it shrink back (measured 2026-10-10 第十八轮).
 	var left := _chip("↙", ARROW_SIZE)
-	left.pressed.connect(turn.bind(-1))
+	left.button_down.connect(_chip_down.bind(-1))
+	left.button_up.connect(_chip_up)
 	add_child(left)
 	left.position = Vector2(ROTATE_INSET, ROTATE_TOP)
 	left.size = Vector2(ROTATE_CHIP, ROTATE_CHIP)
 
 	var right := _chip("↘", ARROW_SIZE)
-	right.pressed.connect(turn.bind(1))
+	right.button_down.connect(_chip_down.bind(1))
+	right.button_up.connect(_chip_up)
 	add_child(right)
 	# the card's own width rather than this Control's, which is only the same number
 	# once the sky has laid the card out at its full size
@@ -644,10 +663,67 @@ static func _box(fill: Color, border: Color) -> StyleBoxFlat:
 
 ## One press of 左转 (direction -1) or 右转 (+1): the view turns one 山 the way
 ## the button's arrow points - facing south and turning right means facing west,
-## so the bearing grows.
+## so the bearing grows. This is the *tap* path; a hold is the auto-rotate below.
 func turn(direction: int) -> void:
 	if rig != null:
 		rig.nudge(TURN_STEP * float(direction), 0.0)
+
+
+## A 左转/右转 chip went down. Nothing is decided here - whether this is a tap or a hold
+## is only known HOLD_SECONDS later, and `_step_hold` is what finds out; and until it is
+## known, nothing about the view has changed yet.
+func _chip_down(direction: int) -> void:
+	_held_dir = direction
+	_held_for = 0.0
+	_held_long = false
+
+
+## It came up. A short press is a tap: with the view standing still it walks one 山, and
+## with the view already turning on its own it **stops the turn and does nothing else**
+## (用户 2026-11-12: 再短点任一停止) - a stop that also stepped the sky would make the
+## button's own tap read as two different things at once. A long press has already been
+## taken up by `_step_hold`, so letting go simply leaves the sky turning.
+func _chip_up() -> void:
+	var direction := _held_dir
+	var held_long := _held_long
+	_held_dir = 0
+	_held_for = 0.0
+	_held_long = false
+	if direction == 0:
+		return
+	if held_long:
+		return
+	if rig != null and rig.is_spinning():
+		rig.stop_spin()
+		return
+	turn(direction)
+
+
+## The hold's own clock, one frame at a time. Nothing else here needs a clock: the press
+## comes from the chip (a Button hit-tests for us) and the release from `_input` below,
+## which sees this window's every event whether the GUI took it or not.
+func _step_hold(delta: float) -> void:
+	if _held_dir == 0 or _held_long:
+		return
+	_held_for += delta
+	if _held_for < HOLD_SECONDS:
+		return
+	_held_long = true
+	if rig != null:
+		# and the direction the chip names: holding the other one mid-turn reverses it
+		rig.spin(_held_dir)
+
+
+## The release half of the hold, taken off the window rather than off the chip: a press
+## that ends *anywhere* - off the chip, off the card, off the window - still ends, and a
+## chip whose button-up went missing must not leave the card believing a finger is on it
+## (the failure 2026-11-03 taught the panel's drag, shell/hud_window.gd). The chip's own
+## `button_up` comes here too, and is a no-op the second time: `_chip_up` clears the hold.
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var button := event as InputEventMouseButton
+		if button.button_index == MOUSE_BUTTON_LEFT and not button.pressed:
+			_chip_up()
 
 
 func rig_face(cardinal: String) -> void:
@@ -660,7 +736,12 @@ func rig_face(cardinal: String) -> void:
 func _draw() -> void:
 	if _font == null:
 		return
-	draw_circle(CENTRE, R_DISC, C_DISC)
+	# The card's backdrop is this circle and nothing else (2026-11-03): the window it lives
+	# in is transparent, so everything not drawn here is the desktop. The radius is the view
+	# arc's, not the rim's - the dial carries 5 px of card outside the rim, and the arc that
+	# says where the camera looks runs along that very edge (user: 到视角弧上). A rectangle
+	# cannot be the backdrop any more; there is no rectangle behind it to fall back on.
+	draw_circle(CENTRE, R_VIEW_ARC, C_DISC)
 	draw_arc(CENTRE, R_DISC, 0.0, TAU, 128, C_RIM, 1.2, true)
 	_draw_ticks()
 	_draw_bodies()

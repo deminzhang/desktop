@@ -1,6 +1,6 @@
-## The twenty-eight 宿's own star groups (星官), drawn as figures on the sphere: the
-## Chinese half of the sky's line layer, next to the 88 IAU figures Constellations
-## writes.
+## The twenty-eight 宿's own star groups (星官), and the three 垣, drawn as figures on
+## the sphere: the Chinese half of the sky's line layer, next to the 88 IAU figures
+## Constellations writes.
 ##
 ## A 宿 is not one figure but a bag of 星官 (角宿 has eleven), and a 星官 is a chain of
 ## stars in the order they are numbered (一, 二, 三 …) - which is the order the traditional
@@ -8,6 +8,11 @@
 ## branches keeps one chain per branch (亢宿's 亢 is drawn κ-ι-φ and κ-λ): the figures here
 ## are the star sets of the 伊世同 table carried onto the line structure of the reference
 ## below, and a branch is what that structure has.
+##
+## The 垣 are the rest of the old sky and are not 宿: 紫微垣 wraps the north pole,
+## 太微垣 is the court south of 北斗, and 天市垣 is the market that runs through 武仙、
+## 巨蛇 and 蛇夫. They live in ENCLOSURES below, written the same way (78 星官 in all),
+## and the sky draws and names them with the same layer as the 宿's own figures.
 ##
 ## The stars are named the way 伊世同《中西对照恒星图表》(1981) names them - Bayer letter
 ## or Flamsteed number, with the constellation, and the star names are the ones its tables
@@ -35,10 +40,10 @@
 ## source side: 218 星官 1070 星 read, 50 rows landing nowhere). A star the catalogue does
 ## not have was dropped when this table was written, and the chain it stood in is split
 ## there - never bridged, because a line between the stars that did resolve is a chord the
-## sky never had. Measured 2026-10-15 (a probe over every entry): every designation this
-## table does carry resolves - 209 星官, 947 designation rows, 873 distinct stars - so the
-## 星名 counts in the comments above each 宿 are the whole of what is drawn, and the
-## missing stars are missing as *names*, not as failed lookups.
+## sky never had. Measured 2026-10-28 (a probe over every entry): every designation this
+## table does carry resolves - 28 宿 and 3 垣, 287 星官, 1,261 星名 (1,173 distinct
+## stars) - so the star counts in the comments above each 宿 are the whole of what is
+## drawn, and the missing stars are missing as *names*, not as failed lookups.
 class_name MansionFigures
 extends RefCounted
 
@@ -339,44 +344,163 @@ const FIGURES := {
 }
 
 
+## The three 垣: the walled palaces the 宿 do not cover. 紫微垣 is the palace around
+## 北极, 太微垣 the court south of 北斗, 天市垣 the market that runs through 武仙、
+## 巨蛇 and 蛇夫. They are written like a 宿 - 星官 -> chains - and drawn by the same
+## layer, but their names are the 垣 themselves, so they are kept in a second table.
+const ENCLOSURES := {
+	## 紫微垣 39 星官 157 星
+	"紫微垣": {
+		"北极": ["γ UMi β UMi 5 UMi 4 UMi HR 4893"],
+		"四辅": ["HR 4062 HR 4084"],
+		"勾陈": ["α UMi δ UMi ε UMi ζ UMi HR 285 HR 8748"],
+		"天皇大帝": ["HR 8546"],
+		"天柱": ["76 Dra HR 8112 69 Dra 59 Dra 40 Dra"],
+		"御女": ["τ Dra 50 Dra", "τ Dra χ Dra"],
+		"女史": ["ψ2 Dra"],
+		"柱史": ["φ Dra"],
+		"尚书": ["27 Dra 15 Dra", "27 Dra 18 Dra", "27 Dra HR 6126", "27 Dra 19 Dra"],
+		"天床": ["HR 5334 HR 5691 HR 5886", "HR 6069 HR 5589"],
+		"大理": ["HR 4646"],
+		"阴德": ["HR 4126"],
+		"六甲": ["HR 2401 HR 2527 HR 3082 HR 2742 HR 1523 HR 1686"],
+		"五帝内座": ["HR 881 47 Cas", "HR 881 HR 774", "HR 881 HR 961", "HR 881 HR 1230"],
+		"华盖": ["40 Cas HR 365 31 Cas ψ Cas 43 Cas ω Cas"],
+		"杠": ["γ Cam HR 932 49 Cas", "50 Cas", "48 Cas 42 Cas 38 Cas"],
+		"紫微右垣": ["α Dra κ Dra λ Dra 24 UMa 43 Cam α Cam HR 985"],
+		"紫微左垣": ["ι Dra θ Dra η Dra ζ Dra υ Dra 73 Dra π Cep 23 Cas"],
+		"天乙": ["10 Dra"],
+		"太乙": ["HR 5162"],
+		"内厨": ["7 Dra 8 Dra"],
+		"北斗": ["α UMa β UMa γ UMa δ UMa ε UMa ζ UMa η UMa"],
+		"辅": ["80 UMa"],
+		"天枪": ["κ2 Boo ι Boo θ Boo"],
+		"玄戈": ["λ Boo"],
+		"三公": ["24 CVn 21 CVn"],
+		"相": ["5 CVn"],
+		"天理": ["HR 4407 66 UMa HR 4569"],
+		"太阳守": ["χ UMa"],
+		"太尊": ["ψ UMa"],
+		"天牢": ["ω UMa 57 UMa", "47 UMa 58 UMa", "49 UMa 56 UMa"],
+		"势": ["34 LMi 33 LMi 42 LMi 46 LMi"],
+		"文昌": ["υ UMa φ UMa θ UMa 15 UMa 18 UMa"],
+		"内阶": ["ο UMa 16 UMa 6 UMa 23 UMa 5 UMa 17 UMa"],
+		"三师": ["ρ UMa", "σ1 UMa"],
+		"八谷": ["δ Aur ξ Aur 26 Cam 14 Cam", "26 Cam 7 Cam", "9 Aur 11 Cam 31 Cam"],
+		"传舍": ["HR 9013 16 Cas 32 Cas 55 Cas HR 860 HR 1035 HR 1040 HR 1046"],
+		"天厨": ["δ Dra σ Dra ε Dra ρ Dra 64 Dra π Dra"],
+		"天棓": ["ξ Dra ν2 Dra β Dra γ Dra ι Her"],
+	},
+	## 太微垣 20 星官 73 星
+	"太微垣": {
+		"五帝座": ["β Leo HR 4535", "β Leo 95 Leo", "β Leo HR 4543"],
+		"太子": ["93 Leo"],
+		"从官": ["92 Leo"],
+		"幸臣": [],
+		"五诸侯": ["39 Com 36 Com 27 Com", "6 Com"],
+		"九卿": ["ρ Vir 32 Vir"],
+		"三公": ["31 Vir 35 Vir"],
+		"内屏": ["ξ Vir ν Vir π Vir ο Vir"],
+		"太微右垣": ["β Vir σ Leo ι Leo θ Leo δ Leo"],
+		"太微左垣": ["η Vir γ Vir δ Vir ε Vir α Com"],
+		"郎将": ["31 Com"],
+		"郎位": ["γ Com", "14 Com 16 Com 17 Com 13 Com 12 Com 21 Com 18 Com 7 Com 23 Com 26 Com 20 Com 5 Com 2 Com"],
+		"常陈": ["α2 CVn 10 CVn 9 CVn β CVn 6 CVn 2 CVn 67 UMa"],
+		"三台": ["ι UMa κ UMa", "λ UMa μ UMa", "ν UMa ξ UMa"],
+		"虎贲": ["72 Leo"],
+		"少微": ["54 Leo 41 LMi 51 Leo"],
+		"长垣": ["46 Leo 52 Leo 53 Leo 48 Leo"],
+		"灵台": ["χ Leo 59 Leo 58 Leo"],
+		"明堂": ["τ Leo υ Leo 87 Leo"],
+		"谒者": ["16 Vir"],
+	},
+	## 天市垣 19 星官 84 星
+	"天市垣": {
+		"帝座": ["α1 Her"],
+		"候": ["α Oph"],
+		"宦者": ["HR 6337 HR 6341 60 Her 37 Oph"],
+		"斗": ["ω Her", "29 Her"],
+		"斛": ["ι Oph κ Oph 47 Her 43 Her"],
+		"列肆": ["σ Ser λ Oph"],
+		"车肆": ["υ Oph 20 Oph"],
+		"市楼": ["μ Oph ο Ser τ Oph ν Ser HR 6496 HR 6601"],
+		"宗正": ["β Oph γ Oph"],
+		"宗人": ["66 Oph 67 Oph 68 Oph 70 Oph"],
+		"宗": ["110 Her 111 Her"],
+		"帛度": ["95 Her 102 Her"],
+		"屠肆": ["109 Her 98 Her"],
+		"天市右垣": ["β Her γ Her κ Her γ Ser β Ser δ Ser α Ser ε Ser δ Oph ε Oph ζ Oph"],
+		"天市左垣": ["δ Her λ Her μ Her ο Her 112 Her ζ Aql θ1 Ser η Ser ν Oph ξ Ser η Oph"],
+		"天纪": ["ξ CrB ζ Her ε Her 59 Her 61 Her 68 Her HR 6570", "θ Her"],
+		"女床": ["π Her 69 Her ρ Her"],
+		"贯索": ["π CrB θ CrB β CrB α CrB γ CrB δ CrB ε CrB ι CrB ρ CrB π CrB"],
+		"七公": ["42 Her τ Her φ Her χ Her ν1 Boo μ1 Boo δ Boo"],
+	},
+}
+
+
 ## The 宿 this table has figures for, in the order they are written.
 static func mansions() -> Array:
 	return FIGURES.keys()
 
 
-## How many 星官 宿 `mansion` is drawn as.
-static func guan_count(mansion: String) -> int:
-	return (FIGURES[mansion] as Dictionary).size()
+## The 垣 this table has figures for, in the order they are written.
+static func enclosures() -> Array:
+	return ENCLOSURES.keys()
 
 
-## How many stars the table names for 宿 `mansion` - the stars that are drawn, so it is the
-## 伊世同 count of the 宿 minus whatever BSC5 does not carry (角宿: 41 of 41).
-static func star_count(mansion: String) -> int:
+## Every region the table draws: the 28 宿, then the three 垣.
+static func regions() -> Array:
+	var out := mansions()
+	out.append_array(enclosures())
+	return out
+
+
+## The 星官 of `region`, whether it is a 宿 or a 垣.
+static func groups_of(region: String) -> Dictionary:
+	if ENCLOSURES.has(region):
+		return ENCLOSURES[region]
+	return FIGURES.get(region, {})
+
+
+## How a region is written in a label: 角宿 for a 宿, 紫微垣 for a 垣.
+static func label_of(region: String) -> String:
+	return region if ENCLOSURES.has(region) else region + "宿"
+
+
+## How many 星官 `region` is drawn as.
+static func guan_count(region: String) -> int:
+	return groups_of(region).size()
+
+
+## How many stars the table names for `region` - the stars that are drawn, so it is the
+## 伊世同 count minus whatever BSC5 does not carry (角宿: 41 of 41).
+static func star_count(region: String) -> int:
 	var total := 0
-	var groups: Dictionary = FIGURES[mansion]
+	var groups := groups_of(region)
 	for guan: String in groups:
 		for chain: String in groups[guan]:
 			total += chain.split(" ", false).size() / 2
 	return total
 
 
-## Every chain of every 宿 in the table, as unit directions on the sphere - what the sky
-## hands to SkyLines.polyline_layer.
+## Every chain of every region in the table, as unit directions on the sphere - what the
+## sky hands to SkyLines.polyline_layer.
 static func chains(catalogue: StarCat) -> Array:
 	var out := []
-	for mansion: String in mansions():
-		out.append_array(mansion_chains(catalogue, mansion))
+	for region: String in regions():
+		out.append_array(region_chains(catalogue, region))
 	return out
 
 
-## The chains of one 宿, in 星官 order and then in part order. A chain a missing star
+## The chains of one region, in 星官 order and then in part order. A chain a missing star
 ## stands in the middle of is drawn as the two runs either side of it (see _chain).
-static func mansion_chains(catalogue: StarCat, mansion: String) -> Array:
+static func region_chains(catalogue: StarCat, region: String) -> Array:
 	var out := []
-	var groups: Dictionary = FIGURES[mansion]
+	var groups := groups_of(region)
 	for guan: String in groups:
 		for chain: String in groups[guan]:
-			for stars: PackedInt32Array in _chain(catalogue, mansion, guan, chain):
+			for stars: PackedInt32Array in _chain(catalogue, region, guan, chain):
 				if stars.size() < 2:
 					continue
 				var line := []
@@ -395,13 +519,13 @@ static func mansion_chains(catalogue: StarCat, mansion: String) -> Array:
 ## (进贤) has no drawn part, so its own star carries the name.
 static func anchors(catalogue: StarCat) -> Array:
 	var out := []
-	for mansion: String in mansions():
-		var groups: Dictionary = FIGURES[mansion]
+	for region: String in regions():
+		var groups := groups_of(region)
 		for guan: String in groups:
 			var parts := []
 			var drawn := false
 			for text: String in groups[guan]:
-				for stars: PackedInt32Array in _chain(catalogue, mansion, guan, text):
+				for stars: PackedInt32Array in _chain(catalogue, region, guan, text):
 					parts.append(stars)
 					drawn = drawn or stars.size() > 1
 			var sum := Vector3.ZERO
@@ -431,7 +555,7 @@ static func star_of(catalogue: StarCat, designation: String, abbrev: String) -> 
 ## The runs one chain's designations resolve to, and the one place a missing star is
 ## reported. A star the catalogue does not have cuts the chain in two there rather than
 ## being bridged: a line between the stars that did resolve is a chord the sky never had.
-static func _chain(catalogue: StarCat, mansion: String, guan: String,
+static func _chain(catalogue: StarCat, region: String, guan: String,
 		chain: String) -> Array:
 	var runs := []
 	var run := PackedInt32Array()
@@ -439,8 +563,8 @@ static func _chain(catalogue: StarCat, mansion: String, guan: String,
 	for i in range(0, tokens.size(), 2):
 		var star := star_of(catalogue, tokens[i], tokens[i + 1])
 		if star < 0:
-			push_warning("MansionFigures: %s宿 %s has no %s %s"
-					% [mansion, guan, tokens[i], tokens[i + 1]])
+			push_warning("MansionFigures: %s %s has no %s %s"
+					% [label_of(region), guan, tokens[i], tokens[i + 1]])
 			if run.size() > 0:
 				runs.append(run)
 				run = PackedInt32Array()

@@ -28,6 +28,18 @@ const FADE := 0.06      ## sine of the altitude names have faded out by
 const MANSION_SIZE := 13
 const MANSION_LIFT := -9.0
 const MANSION_COLOUR := Color(0.95, 0.87, 0.60, 0.52)
+## The 宿 the Moon is standing in wears **white** instead of that pale gold (2026-10-27,
+## 用户: "月入某宿时,所在宿名用白字色显示,其它27宿不变"): the 宿 are the scale the Moon is
+## read against - the Moon is what the twenty-eight were cut for - so the one of the
+## twenty-eight the reading lands in is the one that leads the scale.
+##
+## Neutral white rather than another gold, because every warm ink on this layer already
+## means a body or a group (the 星官 names are gold, the planets amber): white is the
+## one thing up here that is a *reading* rather than a thing in the sky. It is given the
+## Moon's own alpha (not the scale's 0.52) because it has to be found at a glance, and
+## the other twenty-seven keep MANSION_COLOUR exactly as they were - the ink marks which
+## 宿 is being read, not that the rest are in shadow.
+const MANSION_CURRENT_COLOUR := Color(1.00, 1.00, 1.00, 0.95)
 ## The 星官 names: one per star group of the 宿 the sky draws (MansionFigures), written
 ## at the stars themselves in **gold** (2026-10-14, 用户: "星宿本体星组处用金色显名") - the
 ## same gold the dial writes 值符 by (SkyCompassHud.C_DUTY), so 金 means one thing on the
@@ -186,6 +198,11 @@ var _moon_radius := 0.0
 ## 宿 themselves - and whether they are drawn, which is the card's 星宿 switch (用户
 ## 2026-10-12 第二十一轮: 28宿名只在星宿开着时显).
 var _mansions: Array = []
+## Which of `_mansions` the Moon is standing in, or -1 while the sky has not said: that
+## one is written in MANSION_CURRENT_COLOUR, the other twenty-seven in MANSION_COLOUR
+## (set_mansion_current). It is a reading off the moving Moon, so it is restated on
+## every time step rather than handed over once with the layer.
+var _mansion_current := -1
 ## The 星官 names of the 宿 the sky draws (MansionFigures), [{name, direction}] each,
 ## drawn on that same 星宿 switch, which the sky hands over with the ribbons
 ## themselves.
@@ -210,8 +227,10 @@ var _term_current := -1
 ## Whether the 88 constellation names are drawn: the 菜单's 星座 switch, which is
 ## about the constellations alone. The 宿 and the planets stay - they are not
 ## figures, and a switch that took them off with the figures would be lying about
-## its own name (2026-10-09: the layer grew past the one switch).
-var _figures_shown := true
+## its own name (2026-10-09: the layer grew past the one switch). Off to begin with,
+## the same way `SkyBackground._figures_shown` is (用户 2026-10-28), and handed the
+## sky's own state by `SkyBackground._build_labels` / `set_layer_switch`.
+var _figures_shown := false
 
 
 func setup(catalogue: StarCat, camera_3d: Camera3D, root: Node3D) -> void:
@@ -296,6 +315,22 @@ func set_moon(direction: Vector3, radius: float) -> void:
 ## 宿's own 星官 where the sky can place one, and at the middle of its span otherwise.
 func set_mansions(entries: Array) -> void:
 	_mansions = entries
+	refresh()
+
+
+## Which 宿 the Moon is standing in, handed over with the Moon on every time step: the
+## Moon is the body the 宿 are cut for, so the name of the one it is in is written white
+## and the other twenty-seven are left alone (MANSION_CURRENT_COLOUR). The index counts
+## in `Mansions.NAMES` order, which is the order the sky handed `_mansions` over in.
+##
+## -1 is the sky saying it has nothing to read - before the first step, or with the 宿
+## layer itself missing - and it picks no name out. The reading is kept rather than
+## cleared on a switch: the 星宿 switch takes all twenty-eight names off together, and
+## which one the Moon is in is still true when they come back.
+func set_mansion_current(index: int) -> void:
+	if index == _mansion_current:
+		return
+	_mansion_current = index
 	refresh()
 
 
@@ -393,9 +428,19 @@ func _draw() -> void:
 	# names of the divisions and the names of the star groups inside them are the same
 	# layer of reading, and the switch that takes the ribbons takes them. The 宿's name
 	# comes first (it is what has to stay readable), the ecliptic's terms next, the 星官
-	# names of the 宿 after both
-	for entry in _mansions if _mansions_shown else []:
-		_place(entry, placed, basis, MANSION_SIZE, MANSION_COLOUR, MANSION_LIFT)
+	# names of the 宿 after both.
+	#
+	# The 宿 the Moon is in goes first *among the 宿* and in white (用户 2026-10-27): it is
+	# the one name on this scale that is a reading of a body rather than a division, and
+	# a name dropped for colliding with the 宿 next door would be a reading that never
+	# arrives. Placing it before the other twenty-seven is what buys it the room.
+	if _mansions_shown and _mansion_current >= 0 and _mansion_current < _mansions.size():
+		_place(_mansions[_mansion_current], placed, basis, MANSION_SIZE,
+				MANSION_CURRENT_COLOUR, MANSION_LIFT)
+	for i in _mansions.size() if _mansions_shown else 0:
+		if i == _mansion_current:
+			continue
+		_place(_mansions[i], placed, basis, MANSION_SIZE, MANSION_COLOUR, MANSION_LIFT)
 	for i in _terms.size() if _mansions_shown else 0:
 		# the term in force in the accent, the other twenty-three grayer (用户
 		# 2026-10-15): the ring says where the sky is, not only that it is divided

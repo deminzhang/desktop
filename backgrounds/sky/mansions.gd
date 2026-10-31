@@ -90,6 +90,14 @@ func index_of(ra_deg: float) -> int:
 	return NAMES.size() - 1
 
 
+## Which 宿 a direction on the sphere falls in - a unit vector in the catalogue's own
+## frame (StarCat.direction), so a body the sky has already placed can be read without
+## going back through dates: the 宿 are right-ascension spans, and a direction's right
+## ascension is the whole of it.
+func index_of_direction(direction: Vector3) -> int:
+	return index_of(rad_to_deg(atan2(-direction.z, direction.x)))
+
+
 ## Which 宿 a right ascension falls in, its name, and the degrees into it.
 func of_ra(ra_deg: float) -> Dictionary:
 	var index := index_of(ra_deg)

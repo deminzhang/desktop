@@ -30,5 +30,11 @@ window/per_pixel_transparency/allowed=true
 [rendering]
 
 anti_aliasing/quality/msaa_3d=2
-environment/defaults/default_clear_color=Color(0.012, 0.035, 0.055, 1)
+; The RGB here is what Windows adds on top of the desktop across the whole of every
+; per-pixel transparent window: a transparent viewport keeps the clear colour in its RGB
+; with alpha 0, and DWM reads those pixels as premultiplied, so the colour shows up as a
+; wash over everything the window covers. Measured 2026-11-03 on the live HUD as +3/+9/+14
+; - exactly this colour - inside the window's rectangle and nothing just outside it. Black
+; makes the wash invisible, which is what lets the HUD be a circle instead of a rectangle.
+environment/defaults/default_clear_color=Color(0, 0, 0, 1)
 anti_aliasing/quality/screen_space_aa=1

@@ -393,6 +393,10 @@ typedef struct {
 	char id[32];
 	char label[TRAY_LABEL];
 	int current;
+	/* A row the client offers but cannot build yet - 五行's missing four desktops
+	 * (2026-11-04): drawn greyed, and tray_command refuses it even if a click or a
+	 * stale accelerator number still reaches us. */
+	int todo;
 } tray_item;
 
 /* ---------------------------------------------------------- native side state */
@@ -661,9 +665,12 @@ static void tray_reset_model(void) {
 	memset(g_tray_screens, 0, sizeof g_tray_screens);
 }
 
-/* One row: "<index> <current> [<id> ]<label>" - everything left after the id (or
- * after <current>, for a row that has none) is the label, spaces and all. */
-static void tray_set_item(const char *rest, int has_id, tray_item *list, int *count) {
+/* One row: "<index> <current> [<todo> <id> ]<label>" - everything left after the id
+ * (or after <current>, for a 显示器 row that has neither) is the label, spaces and
+ * all. The todo flag is the 换桌面 row's "not built yet" bit: it only ever rides on
+ * a row that has an id. */
+static void tray_set_item(const char *rest, int has_id, int has_todo,
+		tray_item *list, int *count) {
 	char tok[64];
 	rest = next_token(rest, tok, sizeof tok);
 	int index = atoi(tok);
@@ -672,6 +679,10 @@ static void tray_set_item(const char *rest, int has_id, tray_item *list, int *co
 	if (index < 0 || index >= TRAY_MAX_ITEMS) return;
 	tray_item *item = &list[index];
 	memset(item, 0, sizeof *item);
+	if (has_todo) {
+		rest = next_token(rest, tok, sizeof tok);
+		item->todo = atoi(tok) != 0;
+	}
 	if (has_id) {
 		rest = next_token(rest, tok, sizeof tok);
 		copy_str(item->id, (int)sizeof item->id, tok);
@@ -680,8 +691,11 @@ static void tray_set_item(const char *rest, int has_id, tray_item *list, int *co
 	copy_str(item->label, (int)sizeof item->label, rest);
 	trim_utf8(item->label);
 	/* The label with its byte length: a menu that comes out wrong is nearly always a
-	   label that arrived wrong, and this is where that is visible. */
-	logf_("menu item[%d] label %d B: %s", index, (int)strlen(item->label), item->label);
+	   label that arrived wrong, and this is where that is visible. The todo flag is
+	   here for the same reason - it is the difference between a row that can be
+	   picked and one that is only being shown. */
+	logf_("menu item[%d] label %d B%s: %s", index, (int)strlen(item->label),
+			item->todo ? " (todo, greyed)" : "", item->label);
 	item->current = current;
 	if (index + 1 > *count) *count = index + 1;
 }
@@ -711,6 +725,11 @@ static void tray_command(int cmd) {
 	} else if (cmd >= CMD_BG_BASE) {
 		int i = cmd - CMD_BG_BASE;
 		if (i >= g_tray_bg_count) return;
+		if (g_tray_bg[i].todo) {
+			/* A greyed row: the picker shows it, there is nothing behind it yet. */
+			logf_("tray: background %s is a TODO row - ignored", g_tray_bg[i].id);
+			return;
+		}
 		logf_("tray: background %s", g_tray_bg[i].id);
 		push_eventf("menu background %s", g_tray_bg[i].id);
 	} else {
@@ -723,7 +742,16 @@ static void tray_append_items(HMENU menu, tray_item *list, int count, int base) 
 	for (int i = 0; i < count; i++) {
 		WCHAR label[256];
 		to_wide(list[i].label, label, 256);
-		AppendMenuW(menu, MF_STRING | (list[i].current ? MF_CHECKED : 0), base + i, label);
+		/* A todo row is shown, tickable-looking and *not* pickable: greyed and
+		   disabled, so 五行 can be seen to be incomplete without a click that would
+		   do nothing. */
+		UINT flags = MF_STRING | (list[i].current ? MF_CHECKED : 0);
+		if (list[i].todo) flags |= MF_GRAYED | MF_DISABLED;
+		/* The exact flags Windows is handed: MF_GRAYED|MF_DISABLED is the whole
+		   difference between a row that can be picked and a TODO row, and it is not
+		   visible in a breadcrumb that only carries the client's model. */
+		logf_("menu row[%d] '%s' flags=0x%04X", i, list[i].label, (unsigned)flags);
+		AppendMenuW(menu, flags, base + i, label);
 	}
 }
 
@@ -867,7 +895,7 @@ static void tray_pump(void) {
  *   lock 0|1                        whether the HUD passes the mouse through (穿透)
  *   hud 0|1                         show/hide the HUD window (the 面板 switch)
  *   menu reset                      forget the tray model; the rows below refill it
- *   menu bg <i> <cur> <id> <label>  a 换桌面 row
+ *   menu bg <i> <cur> <todo> <id> <label>  a 换桌面 row (todo = greyed, not buildable)
  *   menu screen <i> <cur> <label>   a 显示器 row (only drawn when there are 2+)
  *   menu desk 0|1                   whether the 桌面 row exists at all
  *   menu panel 0|1                  whether the 面板 row exists at all
@@ -919,9 +947,9 @@ static void handle_command(const char *line) {
 		if (!strncmp(rest, "reset", 5)) {
 			tray_reset_model();
 		} else if (!strncmp(rest, "bg ", 3)) {
-			tray_set_item(rest + 3, 1, g_tray_bg, &g_tray_bg_count);
+			tray_set_item(rest + 3, 1, 1, g_tray_bg, &g_tray_bg_count);
 		} else if (!strncmp(rest, "screen ", 7)) {
-			tray_set_item(rest + 7, 0, g_tray_screens, &g_tray_screen_count);
+			tray_set_item(rest + 7, 0, 0, g_tray_screens, &g_tray_screen_count);
 		} else if (!strncmp(rest, "desk ", 5)) {
 			g_tray_desk_row = atoi(rest + 5) != 0;
 		} else if (!strncmp(rest, "panel ", 6)) {

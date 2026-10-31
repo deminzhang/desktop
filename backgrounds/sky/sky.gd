@@ -135,9 +135,9 @@ var _figures: MeshInstance3D
 ## treatment of the figure layer.
 var _ecliptic: Array = []
 ## Whether the constellation figures and their Chinese names are drawn: the card's
-## 星座 switch (`set_layer_switch`). On to begin with - the figures are what makes the
-## constellations readable.
-var _figures_shown := true
+## 星座 switch (`set_layer_switch`). Off to begin with (用户 2026-10-28: 星座开关默认改为关) -
+## the figures are there for whoever asks, with the card's 星座 chip or `--sky-figures=1`.
+var _figures_shown := false
 
 
 # -------------------------------------------------------- background interface
@@ -395,10 +395,10 @@ func _build_catalogue() -> void:
 	star_count = _catalogue.count()
 	_stars = StarField.build(sky_root, _catalogue)
 	_figures = SkyLines.build(sky_root, _catalogue)
-	# the 88 figures can be left off from the command line as well as from the card.
-	# The 宿's own figures are drawn either way, so a shot that has to show them wants
-	# the blue out of the way.
-	_figures_shown = opts == null or opts.flag("sky_figures", true)
+	# the 88 figures can be asked for from the command line as well as from the card,
+	# and are off until asked (用户 2026-10-28). The 宿's own figures are drawn either
+	# way, so a shot of the 星宿 layer needs no `--sky-figures` at all now.
+	_figures_shown = opts != null and opts.flag("sky_figures", false)
 	_figures.visible = _figures_shown
 	# and so can the 星宿 layer (the card's other switch), whose own ribbons are built
 	# further down: read here so that the labels, which are built before them, are told
@@ -432,6 +432,10 @@ func _build_ecliptic() -> void:
 ## hands over to the next, and the 宿's name at the middle of its own span. Static
 ## geometry in the catalogue frame like the ecliptic, and like the ecliptic the names
 ## ride the sphere (SkyLabels projects them).
+##
+## One thing about these names is not static: the 宿 the Moon is standing in is written
+## white (2026-10-27, `_moon_mansion()` below), which is a reading off the moving Moon
+## and is restated with it. Everything else here is built once and never touched again.
 ##
 ## The 距星 themselves are catalogue stars, so a 宿 whose star is missing would put
 ## its tick at right ascension 0 and quietly draw a wrong sky: that case draws
@@ -469,6 +473,9 @@ func _build_mansions() -> void:
 			MANSION_TICK_COLOUR, "MansionTicks")
 	if _labels != null:
 		_labels.set_mansions(names)
+	# the clock's first _apply_time ran before this layer was built (build order), so the
+	# Moon's own 宿 is read once here: otherwise the white name waits for the next tick
+	_moon_mansion()
 	print("XuanDesk: sky: 二十八宿 %d divisions, 觜 %.2f deg, 井 %.2f deg"
 			% [Mansions.NAMES.size(), _mansions.span(19), _mansions.span(21)])
 
@@ -493,17 +500,17 @@ func _build_mansion_figures() -> void:
 	_mansion_figures.visible = _mansion_figures_shown
 	# the ribbons come with their names: a 宿 is a dozen 星官, and 2 to 10 stars that
 	# are not named read as loose strokes (the 88 have had their names since the
-	# constellations went in, for the same reason)
+	# constellations went in, for the same reason). The three 垣 are named the same way.
 	if _labels != null:
 		_labels.set_mansion_figures(MansionFigures.anchors(_catalogue))
 	var names := []
 	var guan := 0
 	var stars := 0
-	for mansion: String in MansionFigures.mansions():
-		names.append(mansion + "宿")
-		guan += MansionFigures.guan_count(mansion)
-		stars += MansionFigures.star_count(mansion)
-	print("XuanDesk: sky: 星宿图 %s: %d 星官 %d 星, %d 段"
+	for region: String in MansionFigures.regions():
+		names.append(MansionFigures.label_of(region))
+		guan += MansionFigures.guan_count(region)
+		stars += MansionFigures.star_count(region)
+	print("XuanDesk: sky: 星官图 %s: %d 星官 %d 星, %d 段"
 			% ["/".join(names), guan, stars, _ribs(_mansion_figures)])
 
 
@@ -615,6 +622,7 @@ func _apply_time() -> void:
 	_light()
 	_bodies()
 	_body_labels()
+	_moon_mansion()
 	_chart()
 	_on_view_changed()
 
@@ -666,6 +674,25 @@ func _body_labels() -> void:
 
 static func _altaz(world: Vector3) -> Vector2:
 	return Vector2(Astro.altitude_of(world), Astro.azimuth_of(world))
+
+
+## The 宿 the Moon is standing in, told to the label layer on every time step: the 宿
+## names are pinned to the sphere, but which of them is the Moon's is a reading off the
+## Moon, which is not (2026-10-27, 用户: "月入某宿时,所在宿名用白字色显示,其它27宿不变").
+##
+## The reading is the **equatorial** one - the span between two 距星' right ascensions,
+## which is the same division the 分野刻 on the equator cut - because that is the scale
+## this sky draws, and the mark the eye can check the name against: the Moon's own hour
+## circle falls between two ticks, so the white name is the one between them.
+##
+## 月离 read off the ecliptic (黄道宿度, the scale 唐《大衍历》 put 日躔月离 on) is the other
+## reading of the same 宿 and lands a degree or two away, most of it in the 月亮's own
+## latitude; it is the one to take beside these names if the ecliptic's divisions are
+## ever drawn next to the equator's.
+func _moon_mansion() -> void:
+	if _labels == null or _mansions == null:
+		return
+	_labels.set_mansion_current(_mansions.index_of_direction(moon.direction))
 
 
 ## The 排盘 the dial and the heaven ring are drawn from: the four pillars for the
